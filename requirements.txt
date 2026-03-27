@@ -16,3 +16,4 @@ numpy==2.2.6
 requests==2.32.3
 pyzbar==0.1.9
 opencv-python==4.10.0.84
+google-genai==1.65.0
