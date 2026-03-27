@@ -323,7 +323,7 @@ from rest_framework.decorators import api_view
 from .services.weather_service import WeatherService
 from .services.nutrition_service import NutritionService
 from .services.exercise_service import AdvancedHealthAnalytics
-from .services.sentiment_service import SentimentAnalyzer
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -428,13 +428,16 @@ def analyze_sentiment(request):
                 'error': 'الرجاء إدخال نص للتحليل'
             }, status=400)
         
-        analyzer = SentimentAnalyzer()
-        result = analyzer.analyze(text)
-        
+        # مؤقتاً، نعيد رد افتراضي بدلاً من التحليل الفعلي
         return Response({
             'success': True,
-            'data': result
+            'data': {
+                'sentiment': 'neutral',
+                'score': 0.5,
+                'message': 'تحليل المشاعر معطل مؤقتاً بسبب محدودية الذاكرة'
+            }
         })
+        
     except Exception as e:
         return Response({
             'success': False,
