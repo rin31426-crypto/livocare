@@ -184,6 +184,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
+    "https://livocare-fronend.onrender.com",
+    "https://camera-service-fag3.onrender.com",
     "https://*.onrender.com",
     "https://*.railway.app",
 ]
