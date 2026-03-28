@@ -428,17 +428,18 @@ def analyze_sentiment(request):
                 'error': 'الرجاء إدخال نص للتحليل'
             }, status=400)
         
-        # مؤقتاً، نعيد رد افتراضي بدلاً من التحليل الفعلي
+        # استخدام SentimentAnalyzer الجديد مع Groq API
+        from .services.sentiment_service import SentimentAnalyzer
+        analyzer = SentimentAnalyzer()
+        result = analyzer.analyze(text)
+        
         return Response({
             'success': True,
-            'data': {
-                'sentiment': 'neutral',
-                'score': 0.5,
-                'message': 'تحليل المشاعر معطل مؤقتاً بسبب محدودية الذاكرة'
-            }
+            'data': result
         })
         
     except Exception as e:
+        print(f"❌ Sentiment analysis error: {e}")
         return Response({
             'success': False,
             'error': str(e)
