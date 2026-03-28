@@ -1345,40 +1345,7 @@ def get_comprehensive_analytics(request):
             'success': False,
             'error': str(e)
         }, status=500)
-# في ملف views.py الخاص بـ Django# في views.py - أضف هذه الدالة في نهاية الملف (قبل السطر الأخير)
-import cv2
-from pyzbar.pyzbar import decode
-import numpy as np
-import base64
-import io
-from PIL import Image
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view
-import json
 
-@csrf_exempt
-@api_view(['POST'])
-import requests
-import os
-
-@csrf_exempt
-@api_view(['POST'])
-def scan_barcode(request):
-    try:
-        data = json.loads(request.body)
-        camera_url = os.environ.get('CAMERA_SERVICE_URL', 'http://localhost:5000')
-        
-        response = requests.post(
-            f"{camera_url}/scan-barcode",
-            json={'image': data.get('image', '')},
-            timeout=10
-        )
-        
-        return JsonResponse(response.json(), status=response.status_code)
-        
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 # إضافة في views.py
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -1569,7 +1536,34 @@ def adb_watch_data(request):
             'error': str(e)
         }, status=500)
 # analytics/views.py - أضف في نهاية الملف
+# ==============================================================================
+# 📷 مسح الباركود - الاتصال بخدمة الكاميرا
+# ==============================================================================
 
+import requests
+import os
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
+import json
+
+@csrf_exempt
+@api_view(['POST'])
+def scan_barcode(request):
+    try:
+        data = json.loads(request.body)
+        camera_url = os.environ.get('CAMERA_SERVICE_URL', 'https://camera-service-fag3.onrender.com')
+        
+        response = requests.post(
+            f"{camera_url}/scan-barcode",
+            json={'image': data.get('image', '')},
+            timeout=10
+        )
+        
+        return JsonResponse(response.json(), status=response.status_code)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
