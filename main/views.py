@@ -1359,79 +1359,26 @@ import json
 
 @csrf_exempt
 @api_view(['POST'])
+import requests
+import os
+
+@csrf_exempt
+@api_view(['POST'])
 def scan_barcode(request):
-    """
-    استقبال الصورة من React وتحليل الباركود والـ QR Code
-    """
     try:
-        # قراءة البيانات المرسلة
         data = json.loads(request.body)
-        image_data = data.get('image', '')
+        camera_url = os.environ.get('CAMERA_SERVICE_URL', 'http://localhost:5000')
         
-        if not image_data:
-            return JsonResponse({
-                'success': False,
-                'message': 'لم يتم استلام الصورة'
-            }, status=400)
+        response = requests.post(
+            f"{camera_url}/scan-barcode",
+            json={'image': data.get('image', '')},
+            timeout=10
+        )
         
-        # إزالة header base64 إذا وجد
-        if 'base64,' in image_data:
-            image_data = image_data.split('base64,')[1]
-        
-        # تحويل base64 إلى صورة
-        image_bytes = base64.b64decode(image_data)
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        # تحويل PIL Image إلى numpy array
-        frame = np.array(image)
-        
-        # تحويل RGB إلى BGR (لأن OpenCV يستخدم BGR)
-        if len(frame.shape) == 3:
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        
-        # مسح الباركود والـ QR Code
-        results = []
-        decoded_objects = decode(frame)
-        
-        for code in decoded_objects:
-            # استخراج النص
-            data_text = code.data.decode('utf-8')
-            code_type = code.type
-            
-            results.append({
-                'type': code_type,
-                'data': data_text
-            })
-        
-        if results:
-            return JsonResponse({
-                'success': True,
-                'results': results,
-                'count': len(results),
-                'message': f'تم العثور على {len(results)} رمز'
-            })
-        else:
-            return JsonResponse({
-                'success': False,
-                'message': 'لم يتم العثور على باركود أو QR Code',
-                'results': []
-            })
-            
-    except json.JSONDecodeError as e:
-        return JsonResponse({
-            'success': False,
-            'error': 'Invalid JSON data',
-            'message': 'بيانات غير صالحة'
-        }, status=400)
+        return JsonResponse(response.json(), status=response.status_code)
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({
-            'success': False,
-            'error': str(e),
-            'message': f'حدث خطأ: {str(e)}'
-        }, status=500)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 # إضافة في views.py
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
