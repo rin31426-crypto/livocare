@@ -58,11 +58,11 @@ INSTALLED_APPS = [
 # ==============================================================================
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # الأول دائماً
+    'django.middleware.common.CommonMiddleware',  # يفضل أن يتبع الكورس مباشرة
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -179,7 +179,7 @@ SIMPLE_JWT = {
 # ==============================================================================
 # 🔗 CORS
 # ==============================================================================
-
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -194,6 +194,8 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
+    "https://livocare-fronend.onrender.com",
+    "https://camera-service-fag3.onrender.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
