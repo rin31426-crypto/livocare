@@ -104,10 +104,36 @@ class MoodEntryViewSet(BaseUserViewSet):
         return super().create(request, *args, **kwargs)
 
 # 4. القياسات الحيوية
+from rest_framework import status  # ✅ تأكد من وجود هذا الاستيراد
+
+# 4. القياسات الحيوية
 class HealthStatusViewSet(BaseUserViewSet):
     queryset = HealthStatus.objects.all()
     serializer_class = HealthStatusSerializer
-
+    
+    def perform_create(self, serializer):
+        """حفظ البيانات وإرجاعها"""
+        print(f"📝 Saving health data for user: {self.request.user}")
+        print(f"📝 Data: {self.request.data}")
+        instance = serializer.save(user=self.request.user)
+        print(f"✅ Saved instance ID: {instance.id}")
+        return instance
+    
+    def create(self, request, *args, **kwargs):
+        """تجاوز create لإرجاع البيانات المحفوظة بالكامل"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # حفظ البيانات
+        instance = serializer.save(user=request.user)
+        
+        # ✅ إعادة البيانات المحفوظة بالكامل
+        response_serializer = self.get_serializer(instance)
+        
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED
+        )
 # 5. الوجبات
 # 5. الوجبات
 class MealViewSet(BaseUserViewSet):
