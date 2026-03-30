@@ -58,8 +58,8 @@ INSTALLED_APPS = [
 # ==============================================================================
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # الأول دائماً
-    'django.middleware.common.CommonMiddleware',  # يفضل أن يتبع الكورس مباشرة
+    'corsheaders.middleware.CorsMiddleware',  # ✅ الأول
+    'django.middleware.common.CommonMiddleware',  # ✅ الثاني
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -179,19 +179,32 @@ SIMPLE_JWT = {
 # ==============================================================================
 # 🔗 CORS
 # ==============================================================================
-CORS_ALLOW_ALL_ORIGINS = False
+# ==============================================================================
+# 🔗 CORS
+# ==============================================================================
+
+# ✅ إزالة السطر المكرر
+# CORS_ALLOW_ALL_ORIGINS = False  # ❌ أزل هذا
+
+# ✅ هذه الإعدادات الصحيحة
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
     "https://livocare-fronend.onrender.com",
     "https://camera-service-fag3.onrender.com",
-    "https://*.onrender.com",
-    "https://*.railway.app",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# ✅ السماح لجميع النطاقات الفرعية من onrender.com
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.onrender\.com$",
+    r"^https://.*\.railway\.app$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+# ✅ فقط للتطوير المحلي - اجعله False في الإنتاج
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # هذا صحيح
 
 CSRF_TRUSTED_ORIGINS = [
     "https://livocare-fronend.onrender.com",
