@@ -372,3 +372,25 @@ class NotificationPreferencesSerializer(serializers.Serializer):
                 {"quiet_hours_end": "وقت النهاية يجب أن يكون بعد وقت البداية"}
             )
         return data
+
+# 5. القياسات الحيوية (الحالة الصحية) - نسخة محسنة
+class HealthStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HealthStatus
+        exclude = ('user',)
+        # ✅ أضف read_only_fields للتأكد من إعادة البيانات
+        read_only_fields = ('id', 'recorded_at')
+    
+    def create(self, validated_data):
+        """إنشاء سجل صحي جديد وإعادة البيانات كاملة"""
+        print(f"📝 HealthStatusSerializer.create - Data: {validated_data}")
+        instance = HealthStatus.objects.create(**validated_data)
+        print(f"✅ Created instance ID: {instance.id}")
+        return instance
+    
+    def update(self, instance, validated_data):
+        """تحديث سجل صحي موجود"""
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
