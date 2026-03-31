@@ -2,8 +2,9 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from main import views
 from rest_framework_simplejwt.views import TokenRefreshView 
-# ✅ استيراد الدالة scan_barcode
-from main.views import scan_barcode
+
+# ✅ استيراد الدوال المطلوبة - تصحيح
+from main.views import scan_barcode, advanced_cross_insights
 
 router = DefaultRouter()
 # الروابط التي تم تأكيدها
@@ -25,7 +26,12 @@ router.register(r'environment-data', views.EnvironmentDataViewSet, basename='env
 router.register(r'users', views.UserProfileViewSet, basename='users')
 
 urlpatterns = [
+    # ✅ مسار تجديد التوكن
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # ✅ مسار التحليلات المتقدمة
+    path('api/advanced-insights/', advanced_cross_insights, name='advanced-insights'),
+    
     # ✅ المسار الرئيسي للـ router
     path('', include(router.urls)),
     
@@ -50,6 +56,7 @@ urlpatterns = [
     # 🧠 تحليلات ذكية متكاملة
     path('api/analytics/smart-insights/', views.smart_insights, name='smart-insights'),
     path('api/cross-insights/', views.cross_insights, name='cross-insights'),
+    # ملاحظة: هذا المسار مكرر مع المسار أعلاه، يمكن إزالته أو تركه
     path('api/advanced-insights/', views.advanced_cross_insights, name='advancedHealthInsights'),
     
     # 🔔 مسارات الإشعارات
@@ -80,38 +87,9 @@ urlpatterns = [
     # 📊 التقارير
     path('api/reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
     
-    # ✅ ماسح الباركود - الآن يعمل بعد إضافة الاستيراد
+    # ✅ ماسح الباركود
     path('api/scan-barcode/', scan_barcode, name='scan-barcode'),
     path('api/watch/health-data/', views.watch_health_data, name='watch_health_data'),
     path('api/watch/history/', views.watch_history, name='watch_history'),
     path('api/watch/adb-data/', views.adb_watch_data, name='adb_watch_data'),
 ]
-
-# ==============================================================================
-# 📋 قائمة بجميع مسارات الإشعارات المتاحة (للتوثيق)
-# ==============================================================================
-
-"""
-📋 قائمة مسارات الإشعارات الكاملة:
-
-🔹 GET    /api/notifications/                  - قائمة جميع الإشعارات
-🔹 GET    /api/notifications/{id}/             - عرض إشعار محدد
-🔹 POST   /api/notifications/                   - إنشاء إشعار جديد
-🔹 PUT    /api/notifications/{id}/             - تحديث إشعار
-🔹 PATCH  /api/notifications/{id}/             - تحديث جزئي
-🔹 DELETE /api/notifications/{id}/             - حذف إشعار
-
-🔹 GET    /api/notifications/unread_count/     - عدد الإشعارات غير المقروءة
-🔹 POST   /api/notifications/mark_all_read/    - تحديد الكل كمقروء
-🔹 POST   /api/notifications/{id}/mark_read/   - تحديد إشعار محدد كمقروء
-🔹 GET    /api/notifications/by_type/?type=    - تصفية حسب النوع
-🔹 GET    /api/notifications/by_priority/?priority= - تصفية حسب الأولوية
-🔹 GET    /api/notifications/recent/           - آخر 10 إشعارات
-🔹 GET    /api/notifications/stats/            - إحصائيات متقدمة
-🔹 GET    /api/notifications/archive/          - عرض الإشعارات المؤرشفة
-🔹 POST   /api/notifications/archive/          - استعادة من الأرشيف
-🔹 DELETE /api/notifications/delete-all-read/  - حذف كل المقروء
-🔹 DELETE /api/notifications/delete-all/       - حذف الكل
-🔹 GET    /api/notifications/search/?q=        - البحث في الإشعارات
-🔹 POST   /api/notifications/create_test_notification/ - إنشاء إشعار تجريبي
-"""
