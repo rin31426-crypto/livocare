@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from main import views
-
+from rest_framework_simplejwt.views import TokenRefreshView 
 # ✅ استيراد الدالة scan_barcode
 from main.views import scan_barcode
 
@@ -25,6 +25,7 @@ router.register(r'environment-data', views.EnvironmentDataViewSet, basename='env
 router.register(r'users', views.UserProfileViewSet, basename='users')
 
 urlpatterns = [
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # ✅ المسار الرئيسي للـ router
     path('', include(router.urls)),
     
