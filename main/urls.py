@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from main import views
 from rest_framework_simplejwt.views import TokenRefreshView 
-
+from django.http import JsonResponse  
 # ✅ استيراد الدوال المطلوبة - تصحيح
 from main.views import scan_barcode, advanced_cross_insights
 
@@ -86,7 +86,7 @@ urlpatterns = [
     
     # 📊 التقارير
     path('api/reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
-    
+    path('api/test-simple/', lambda request: JsonResponse({'status': 'ok', 'message': 'Test endpoint works!'})),
     # ✅ ماسح الباركود
     path('api/scan-barcode/', scan_barcode, name='scan-barcode'),
     path('api/watch/health-data/', views.watch_health_data, name='watch_health_data'),
