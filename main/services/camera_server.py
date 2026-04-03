@@ -16,10 +16,12 @@ CORS(app)
 # ✅ دالة للبحث عن المنتج في Open Food Facts
 def get_product_info(barcode):
     """البحث عن معلومات المنتج باستخدام الباركود"""
+    print(f"🔍 Searching for barcode: {barcode}")
+    
     try:
         # البحث في Open Food Facts API
         url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=5, headers={'User-Agent': 'CameraService/1.0'})
         
         if response.status_code == 200:
             data = response.json()
@@ -42,6 +44,8 @@ def get_product_info(barcode):
                 elif 'g' in quantity.lower():
                     unit = 'غرام'
                 
+                print(f"✅ Product found: {product_name}")
+                
                 return {
                     'name': product_name,
                     'calories': round(float(calories), 1),
@@ -51,8 +55,13 @@ def get_product_info(barcode):
                     'brand': product.get('brands', ''),
                     'unit': unit
                 }
+            else:
+                print(f"⚠️ Product not found in Open Food Facts for barcode: {barcode}")
+        else:
+            print(f"⚠️ Open Food Facts API error: {response.status_code}")
+            
     except Exception as e:
-        print(f"Error fetching product info: {e}")
+        print(f"❌ Error fetching product info: {e}")
     
     # إذا لم يتم العثور على المنتج
     return {
@@ -67,6 +76,8 @@ def get_product_info(barcode):
 
 @app.route('/scan-barcode', methods=['POST'])
 def scan_barcode():
+    print("📸 Scan request received")
+    
     try:
         data = request.json
         image_data = data.get('image', '')
@@ -100,7 +111,7 @@ def scan_barcode():
                 # ✅ البحث عن معلومات المنتج
                 product_info = get_product_info(barcode)
                 
-                results.append({
+                result = {
                     'type': code_type,
                     'data': barcode,
                     'name': product_info['name'],
@@ -110,20 +121,24 @@ def scan_barcode():
                     'fat': product_info['fat'],
                     'brand': product_info['brand'],
                     'unit': product_info['unit']
-                })
+                }
+                results.append(result)
+                
+                print(f"📦 Returning product: {result}")
             
             return jsonify({
                 'success': True,
                 'results': results
             })
         else:
+            print("⚠️ No barcode found in image")
             return jsonify({
                 'success': False,
                 'message': 'No barcode found'
             })
             
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -134,4 +149,5 @@ def health():
     return jsonify({'status': 'ok'})
 
 if __name__ == '__main__':
+    print("🚀 Starting Camera Service on port 5000")
     app.run(host='0.0.0.0', port=5000, debug=True)
