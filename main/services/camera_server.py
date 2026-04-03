@@ -9,9 +9,13 @@ from PIL import Image
 import io
 import requests
 import json
+import os
 
 app = Flask(__name__)
 CORS(app)
+
+# ✅ استخدام PORT من متغيرات البيئة (Render يستخدم 10000)
+PORT = int(os.environ.get('PORT', 10000))
 
 # ✅ دالة للبحث عن المنتج في Open Food Facts
 def get_product_info(barcode):
@@ -149,5 +153,5 @@ def health():
     return jsonify({'status': 'ok'})
 
 if __name__ == '__main__':
-    print("🚀 Starting Camera Service on port 5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print(f"🚀 Starting Camera Service on port {PORT}")
+    app.run(host='0.0.0.0', port=PORT, debug=False)
