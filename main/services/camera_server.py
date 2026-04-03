@@ -7,9 +7,32 @@ import numpy as np
 import base64
 from PIL import Image
 import io
+import requests
 
 app = Flask(__name__)
 CORS(app)
+
+# ✅ دالة للبحث عن المنتج في Open Food Facts
+def search_product(barcode):
+    try:
+        response = requests.get(f'https://world.openfoodfacts.org/api/v0/product/{barcode}.json', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('status') == 1:
+                product = data['product']
+                nutriments = product.get('nutriments', {})
+                return {
+                    'name': product.get('product_name', product.get('generic_name', f'منتج ({barcode[-8:]})')),
+                    'calories': nutriments.get('energy-kcal', nutriments.get('energy', 0)),
+                    'protein': nutriments.get('proteins', 0),
+                    'carbs': nutriments.get('carbohydrates', 0),
+                    'fat': nutriments.get('fat', 0),
+                    'brand': product.get('brands', ''),
+                    'unit': 'غرام'
+                }
+    except Exception as e:
+        print(f'Error searching product: {e}')
+    return None
 
 @app.route('/scan-barcode', methods=['POST'])
 def scan_barcode():
@@ -32,12 +55,37 @@ def scan_barcode():
         # مسح الباركود
         results = []
         for code in decode(frame):
-            data = code.data.decode('utf-8')
+            barcode = code.data.decode('utf-8')
             code_type = code.type
-            results.append({
-                'type': code_type,
-                'data': data
-            })
+            
+            # ✅ البحث عن المنتج
+            product = search_product(barcode)
+            
+            if product:
+                results.append({
+                    'type': code_type,
+                    'data': barcode,
+                    'name': product['name'],
+                    'calories': product['calories'],
+                    'protein': product['protein'],
+                    'carbs': product['carbs'],
+                    'fat': product['fat'],
+                    'brand': product.get('brand', ''),
+                    'unit': product.get('unit', 'غرام')
+                })
+            else:
+                # ✅ إذا لم يتم العثور على المنتج، نرسل البيانات الأساسية
+                results.append({
+                    'type': code_type,
+                    'data': barcode,
+                    'name': f'منتج جديد ({barcode[-8:]})',
+                    'calories': 0,
+                    'protein': 0,
+                    'carbs': 0,
+                    'fat': 0,
+                    'brand': '',
+                    'unit': 'غرام'
+                })
         
         if results:
             return jsonify({
@@ -51,6 +99,7 @@ def scan_barcode():
             })
             
     except Exception as e:
+        print(f'Error: {e}')
         return jsonify({
             'success': False,
             'error': str(e)
