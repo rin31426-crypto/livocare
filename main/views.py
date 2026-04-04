@@ -1983,3 +1983,157 @@ def import_medication_from_fda(request):
             'success': False,
             'error': str(e)
         }, status=500)
+# main/views.py
+
+class HabitLogViewSet(viewsets.ModelViewSet):
+    """ViewSet لإدارة سجلات العادات"""
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    serializer_class = HabitLogSerializer
+    
+    def get_queryset(self):
+        return HabitLog.objects.filter(habit__user=self.request.user).order_by('-log_date')
+    
+    def perform_create(self, serializer):
+        # التأكد من أن العادة تنتمي للمستخدم
+        habit = serializer.validated_data.get('habit')
+        if habit.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("لا يمكنك إضافة سجل لعادة لا تخصك")
+        serializer.save()
+    
+    # ✅ أضف هذه الدالة
+    @action(detail=False, methods=['get'])
+    def today(self, request):
+        """جلب سجلات العادات لليوم الحالي"""
+        from django.utils import timezone
+        today = timezone.now().date()
+        
+        # جلب سجلات اليوم
+        logs = HabitLog.objects.filter(
+            habit__user=request.user,
+            log_date=today
+        ).select_related('habit')
+        
+        # جلب جميع العادات النشطة
+        all_habits = HabitDefinition.objects.filter(user=request.user, is_active=True)
+        
+        # إنشاء قائمة النتائج
+        result = []
+        log_habit_ids = logs.values_list('habit_id', flat=True)
+        
+        # إضافة السجلات الموجودة
+        for log in logs:
+            result.append({
+                'id': log.id,
+                'habit': {
+                    'id': log.habit.id,
+                    'name': log.habit.name,
+                    'description': log.habit.description,
+                    'frequency': log.habit.frequency,
+                },
+                'is_completed': log.is_completed,
+                'actual_value': log.actual_value,
+                'notes': log.notes,
+                'log_date': log.log_date,
+            })
+        
+        # إضافة العادات التي لم تسجل بعد اليوم
+        for habit in all_habits:
+            if habit.id not in log_habit_ids:
+                result.append({
+                    'id': None,
+                    'habit': {
+                        'id': habit.id,
+                        'name': habit.name,
+                        'description': habit.description,
+                        'frequency': habit.frequency,
+                    },
+                    'is_completed': False,
+                    'actual_value': None,
+                    'notes': None,
+                    'log_date': today,
+                })
+        
+        return Response(result)
+    
+    # ✅ أضف هذه الدالة أيضاً
+    @action(detail=False, methods=['post'])
+    def complete(self, request):
+        """تسجيل إنجاز عادة لليوم"""
+        from django.utils import timezone
+        
+        habit_id = request.data.get('habit_id')
+        actual_value = request.data.get('actual_value')
+        notes = request.data.get('notes', '')
+        
+        if not habit_id:
+            return Response({'error': 'habit_id مطلوب'}, status=400)
+        
+        try:
+            habit = HabitDefinition.objects.get(id=habit_id, user=request.user)
+        except HabitDefinition.DoesNotExist:
+            return Response({'error': 'العادة غير موجودة'}, status=404)
+        
+        today = timezone.now().date()
+        
+        log, created = HabitLog.objects.update_or_create(
+            habit=habit,
+            log_date=today,
+            defaults={
+                'is_completed': True,
+                'actual_value': actual_value,
+                'notes': notes
+            }
+        )
+        
+        serializer = self.get_serializer(log)
+        return Response(serializer.data)
+    
+    # ✅ أضف هذه الدالة للإحصائيات
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """إحصائيات العادات"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        habits = HabitDefinition.objects.filter(user=request.user, is_active=True)
+        
+        stats_data = []
+        for habit in habits:
+            total_logs = HabitLog.objects.filter(habit=habit).count()
+            completed_logs = HabitLog.objects.filter(habit=habit, is_completed=True).count()
+            
+            # آخر 7 أيام
+            week_ago = timezone.now().date() - timedelta(days=7)
+            weekly_logs = HabitLog.objects.filter(
+                habit=habit,
+                log_date__gte=week_ago,
+                is_completed=True
+            ).count()
+            
+            # حساب السلسلة المتتالية
+            streak = 0
+            check_date = timezone.now().date()
+            while True:
+                has_log = HabitLog.objects.filter(
+                    habit=habit,
+                    log_date=check_date,
+                    is_completed=True
+                ).exists()
+                if has_log:
+                    streak += 1
+                    check_date -= timedelta(days=1)
+                else:
+                    break
+            
+            stats_data.append({
+                'habit_id': habit.id,
+                'name': habit.name,
+                'total_logs': total_logs,
+                'completed_logs': completed_logs,
+                'completion_rate': round((completed_logs / total_logs * 100) if total_logs > 0 else 0, 1),
+                'weekly_completion': weekly_logs,
+                'streak': streak
+            })
+        
+        return Response(stats_data)
