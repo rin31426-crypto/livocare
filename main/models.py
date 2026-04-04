@@ -249,7 +249,48 @@ class HabitDefinition(models.Model):
     def __str__(self):
         return f"Habit: {self.name} for {self.user.username}"
 # الملف: main/models.py (تابع)
+# main/models.py - أضف في نهاية الملف
 
+class Medication(models.Model):
+    """نموذج للأدوية"""
+    ndc_code = models.CharField(max_length=20, unique=True, blank=True, null=True, verbose_name="رمز NDC")
+    brand_name = models.CharField(max_length=500, verbose_name="الاسم التجاري")
+    generic_name = models.CharField(max_length=500, blank=True, verbose_name="الاسم العلمي")
+    manufacturer = models.CharField(max_length=500, blank=True, verbose_name="الشركة المصنعة")
+    dosage_form = models.CharField(max_length=200, blank=True, verbose_name="شكل الجرعة")
+    route = models.CharField(max_length=200, blank=True, verbose_name="طريقة الاستخدام")
+    strength = models.CharField(max_length=200, blank=True, verbose_name="التركيز")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "دواء"
+        verbose_name_plural = "الأدوية"
+    
+    def __str__(self):
+        return f"{self.brand_name} ({self.generic_name})"
+
+
+class UserMedication(models.Model):
+    """نموذج لأدوية المستخدم"""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_medications')
+    medication = models.ForeignKey(Medication, on_delete=models.CASCADE, related_name='user_medications')
+    dosage = models.CharField(max_length=100, blank=True, verbose_name="الجرعة")
+    frequency = models.CharField(max_length=100, blank=True, verbose_name="التكرار")
+    start_date = models.DateField(verbose_name="تاريخ البدء")
+    end_date = models.DateField(blank=True, null=True, verbose_name="تاريخ الانتهاء")
+    notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    reminder_time = models.TimeField(blank=True, null=True, verbose_name="وقت التذكير")
+    reminder_days = models.CharField(max_length=50, blank=True, verbose_name="أيام التذكير")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "دواء المستخدم"
+        verbose_name_plural = "أدوية المستخدمين"
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.medication.brand_name}"
 class HabitLog(models.Model):
     """
     نموذج سجل العادات (يمثل كيان سجل_العادات)

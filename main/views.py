@@ -1607,3 +1607,379 @@ def test_websocket(request):
         'websocket_url': 'ws://localhost:8000/ws/watch/',
         'status': 'ok'
     })
+# ==============================================================================
+# 🩺 الأدوية والتفاعلات الدوائية - مع openFDA
+# ==============================================================================
+
+import requests
+from django.conf import settings
+
+# خدمة openFDA
+class OpenFDAService:
+    """خدمة جلب بيانات الأدوية من openFDA"""
+    
+    BASE_URL = "https://api.fda.gov/drug"
+    
+    def __init__(self):
+        self.api_key = getattr(settings, 'OPENFDA_API_KEY', None)
+    
+    def _make_request(self, endpoint, params=None):
+        """تنفيذ طلب إلى openFDA"""
+        if params is None:
+            params = {}
+        
+        if self.api_key:
+            params['api_key'] = self.api_key
+        
+        url = f"{self.BASE_URL}/{endpoint}.json"
+        
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching from openFDA: {e}")
+            return None
+    
+    def search_by_brand_name(self, brand_name, limit=10):
+        """البحث عن دواء بالاسم التجاري"""
+        params = {
+            'search': f'openfda.brand_name.exact:"{brand_name}"',
+            'limit': limit
+        }
+        data = self._make_request('drugsfda', params)
+        
+        if data and 'results' in data:
+            return self._parse_drug_results(data['results'])
+        return []
+    
+    def search_by_generic_name(self, generic_name, limit=10):
+        """البحث عن دواء بالاسم العلمي"""
+        params = {
+            'search': f'openfda.generic_name:"{generic_name}"',
+            'limit': limit
+        }
+        data = self._make_request('drugsfda', params)
+        
+        if data and 'results' in data:
+            return self._parse_drug_results(data['results'])
+        return []
+    
+    def search_by_ndc(self, ndc_code):
+        """البحث عن دواء بـ NDC"""
+        params = {
+            'search': f'openfda.product_ndc:"{ndc_code}"',
+            'limit': 1
+        }
+        data = self._make_request('drugsfda', params)
+        
+        if data and 'results' and len(data['results']) > 0:
+            return self._parse_drug(data['results'][0])
+        return None
+    
+    def _parse_drug_results(self, results):
+        """تحويل نتائج الأدوية إلى قائمة"""
+        parsed = []
+        for result in results:
+            parsed.append(self._parse_drug(result))
+        return parsed
+    
+    def _parse_drug(self, drug_data):
+        """تحويل بيانات دواء فردية"""
+        openfda = drug_data.get('openfda', {})
+        products = drug_data.get('products', [])
+        
+        return {
+            'brand_name': openfda.get('brand_name', [''])[0] if openfda.get('brand_name') else '',
+            'generic_name': openfda.get('generic_name', [''])[0] if openfda.get('generic_name') else '',
+            'manufacturer': openfda.get('manufacturer_name', [''])[0] if openfda.get('manufacturer_name') else '',
+            'ndc_code': openfda.get('product_ndc', [''])[0] if openfda.get('product_ndc') else '',
+            'dosage_form': products[0].get('dosage_form', '') if products else '',
+            'route': products[0].get('route', '') if products else '',
+            'strength': products[0].get('strength', '') if products else '',
+        }
+
+
+# إنشاء实例 الخدمة
+fda_service = OpenFDAService()
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def search_medication(request):
+    """
+    البحث عن دواء من openFDA
+    استخدام: GET /api/medications/search/?q=اسم_الدواء&type=brand|generic|ndc
+    """
+    query = request.query_params.get('q', '').strip()
+    search_type = request.query_params.get('type', 'brand')
+    
+    if not query:
+        return Response({
+            'success': False,
+            'error': 'الرجاء إدخال اسم الدواء',
+            'results': []
+        }, status=400)
+    
+    try:
+        if search_type == 'brand':
+            results = fda_service.search_by_brand_name(query)
+        elif search_type == 'generic':
+            results = fda_service.search_by_generic_name(query)
+        elif search_type == 'ndc':
+            result = fda_service.search_by_ndc(query)
+            results = [result] if result else []
+        else:
+            results = fda_service.search_by_brand_name(query)
+        
+        return Response({
+            'success': True,
+            'results': results,
+            'count': len(results),
+            'search_type': search_type,
+            'query': query
+        })
+        
+    except Exception as e:
+        print(f"Error in search_medication: {e}")
+        return Response({
+            'success': False,
+            'error': str(e),
+            'results': []
+        }, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_medication_details(request, medication_id):
+    """
+    الحصول على تفاصيل دواء (من قاعدة البيانات المحلية)
+    """
+    try:
+        medication = Medication.objects.get(id=medication_id)
+        serializer = MedicationSerializer(medication)
+        
+        return Response({
+            'success': True,
+            'medication': serializer.data
+        })
+    except Medication.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'الدواء غير موجود'
+        }, status=404)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_medications(request):
+    """
+    الحصول على قائمة أدوية المستخدم
+    """
+    try:
+        user_meds = UserMedication.objects.filter(
+            user=request.user,
+            end_date__isnull=True
+        ).select_related('medication')
+        
+        # تنسيق البيانات للعرض
+        result = []
+        for user_med in user_meds:
+            result.append({
+                'id': user_med.id,
+                'medication': {
+                    'id': user_med.medication.id,
+                    'brand_name': user_med.medication.brand_name,
+                    'generic_name': user_med.medication.generic_name,
+                    'manufacturer': user_med.medication.manufacturer,
+                    'dosage_form': user_med.medication.dosage_form,
+                },
+                'dosage': user_med.dosage,
+                'frequency': user_med.frequency,
+                'start_date': user_med.start_date,
+                'end_date': user_med.end_date,
+                'notes': user_med.notes,
+                'reminder_time': user_med.reminder_time,
+                'reminder_days': user_med.reminder_days,
+            })
+        
+        return Response({
+            'success': True,
+            'data': result,
+            'count': len(result)
+        })
+        
+    except Exception as e:
+        print(f"Error in get_user_medications: {e}")
+        return Response({
+            'success': False,
+            'error': str(e),
+            'data': []
+        }, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_user_medication(request):
+    """
+    إضافة دواء إلى روتين المستخدم
+    البيانات المطلوبة:
+    {
+        "medication_id": 1,
+        "dosage": "500mg",
+        "frequency": "مرتين يومياً",
+        "start_date": "2024-01-01",
+        "end_date": null,
+        "notes": "",
+        "reminder_time": "08:00:00",
+        "reminder_days": "0,1,2,3,4,5,6"
+    }
+    """
+    try:
+        medication_id = request.data.get('medication_id')
+        dosage = request.data.get('dosage', '')
+        frequency = request.data.get('frequency', '')
+        start_date = request.data.get('start_date')
+        end_date = request.data.get('end_date')
+        notes = request.data.get('notes', '')
+        reminder_time = request.data.get('reminder_time')
+        reminder_days = request.data.get('reminder_days', '')
+        
+        # التحقق من وجود الدواء
+        try:
+            medication = Medication.objects.get(id=medication_id)
+        except Medication.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'الدواء غير موجود'
+            }, status=404)
+        
+        # إنشاء سجل الدواء للمستخدم
+        user_med = UserMedication.objects.create(
+            user=request.user,
+            medication=medication,
+            dosage=dosage,
+            frequency=frequency,
+            start_date=start_date,
+            end_date=end_date,
+            notes=notes,
+            reminder_time=reminder_time,
+            reminder_days=reminder_days
+        )
+        
+        return Response({
+            'success': True,
+            'message': 'تم إضافة الدواء بنجاح',
+            'data': {
+                'id': user_med.id,
+                'medication_id': medication.id,
+                'brand_name': medication.brand_name,
+                'dosage': dosage,
+                'frequency': frequency,
+                'start_date': start_date,
+                'reminder_time': reminder_time
+            }
+        }, status=201)
+        
+    except Exception as e:
+        print(f"Error in add_user_medication: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_user_medication(request, user_med_id):
+    """
+    حذف دواء من روتين المستخدم
+    """
+    try:
+        user_med = UserMedication.objects.get(id=user_med_id, user=request.user)
+        user_med.delete()
+        
+        return Response({
+            'success': True,
+            'message': 'تم حذف الدواء بنجاح'
+        })
+        
+    except UserMedication.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'السجل غير موجود'
+        }, status=404)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def import_medication_from_fda(request):
+    """
+    استيراد دواء من openFDA إلى قاعدة البيانات المحلية
+    البيانات المطلوبة:
+    {
+        "brand_name": "اسم الدواء"
+    }
+    """
+    brand_name = request.data.get('brand_name', '').strip()
+    
+    if not brand_name:
+        return Response({
+            'success': False,
+            'error': 'الرجاء إدخال اسم الدواء'
+        }, status=400)
+    
+    try:
+        # البحث في openFDA
+        results = fda_service.search_by_brand_name(brand_name, limit=1)
+        
+        if not results:
+            return Response({
+                'success': False,
+                'error': 'لم يتم العثور على الدواء'
+            }, status=404)
+        
+        drug_data = results[0]
+        
+        # إنشاء أو تحديث الدواء في قاعدة البيانات
+        medication, created = Medication.objects.update_or_create(
+            ndc_code=drug_data.get('ndc_code', ''),
+            defaults={
+                'brand_name': drug_data.get('brand_name', ''),
+                'generic_name': drug_data.get('generic_name', ''),
+                'manufacturer': drug_data.get('manufacturer', ''),
+                'dosage_form': drug_data.get('dosage_form', ''),
+                'route': drug_data.get('route', ''),
+                'strength': drug_data.get('strength', ''),
+                'is_active': True
+            }
+        )
+        
+        return Response({
+            'success': True,
+            'message': 'تم استيراد الدواء بنجاح',
+            'created': created,
+            'medication': {
+                'id': medication.id,
+                'brand_name': medication.brand_name,
+                'generic_name': medication.generic_name,
+                'manufacturer': medication.manufacturer
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error in import_medication_from_fda: {e}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
