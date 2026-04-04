@@ -226,19 +226,23 @@ class FoodItem(models.Model):
         return f"{self.name} - {self.quantity} {self.unit}"
 # الملف: main/models.py (تابع)
 
+# main/models.py
+
 class HabitDefinition(models.Model):
     """
     نموذج تعريف العادة (يمثل كيان تعريف_العادة)
     يُعرف العادة التي يرغب المستخدم في تتبعها
     """
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='habit_definitions', verbose_name="المستخدم") # المفتاح الأجنبي (1:M)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='habit_definitions', verbose_name="المستخدم")
     
     name = models.CharField(max_length=100, verbose_name="اسم العادة")
     description = models.TextField(verbose_name="وصف العادة والهدف منها")
     start_date = models.DateField(auto_now_add=True, verbose_name="تاريخ البدء")
     frequency = models.CharField(max_length=20, choices=[('Daily', 'يومي'), ('Weekly', 'أسبوعي'), ('Monthly', 'شهري')], default='Daily', verbose_name="تكرار العادة")
     
-    # يمكن إضافة عدد مرات التكرار المستهدف (مثلاً: 3 مرات في الأسبوع)
+    # ✅ أضف هذا الحقل
+    is_active = models.BooleanField(default=True, verbose_name="نشط")
+    
     target_value = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="القيمة المستهدفة")
     target_unit = models.CharField(max_length=20, null=True, blank=True, verbose_name="وحدة القياس (مثلاً: لتر، دقيقة)")
 
@@ -247,6 +251,7 @@ class HabitDefinition(models.Model):
         verbose_name_plural = "تعريفات العادات"
 
     def __str__(self):
+        return f"Habit: {self.name} for {self.user.username}"
         return f"Habit: {self.name} for {self.user.username}"
 # الملف: main/models.py (تابع)
 # main/models.py - أضف في نهاية الملف
