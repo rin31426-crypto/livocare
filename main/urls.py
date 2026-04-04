@@ -89,4 +89,12 @@ urlpatterns = [
     path('watch/health-data/', views.watch_health_data, name='watch_health_data'),
     path('watch/history/', views.watch_history, name='watch_history'),
     path('watch/adb-data/', views.adb_watch_data, name='adb_watch_data'),
+    # main/urls.py - إضافة في urlpatterns
+
+# 🩺 الأدوية والتفاعلات الدوائية
+path('api/medications/search/', views.search_medication, name='search-medication'),
+path('api/medications/<int:medication_id>/', views.get_medication_details, name='medication-details'),
+path('api/medications/user/', views.get_user_medications, name='user-medications'),
+path('api/medications/user/add/', views.add_user_medication, name='add-user-medication'),
+path('api/medications/user/<int:user_med_id>/delete/', views.delete_user_medication, name='delete-user-medication'),
 ]
