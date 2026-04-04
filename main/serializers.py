@@ -6,7 +6,7 @@ from .models import (
     CustomUser, PhysicalActivity, Sleep, MoodEntry, 
     HealthStatus, Meal, FoodItem, HabitDefinition, 
     HabitLog, HealthGoal, ChronicCondition, MedicalRecord, 
-    Recommendation, ChatLog, Notification, EnvironmentData
+    Recommendation, ChatLog, Notification, EnvironmentData,Medication, UserMedication
 )
 from django.contrib.auth.hashers import make_password
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -98,10 +98,15 @@ class HabitDefinitionSerializer(serializers.ModelSerializer):
 
 # 9. سجل العادات
 class HabitLogSerializer(serializers.ModelSerializer):
+    """سيرياليزر لسجل العادات"""
+    habit_name = serializers.CharField(source='habit.name', read_only=True)
+    habit_description = serializers.CharField(source='habit.description', read_only=True)
+    
     class Meta:
         model = HabitLog
-        fields = '__all__' 
-
+        fields = ['id', 'habit', 'habit_name', 'habit_description', 'log_date', 
+                  'is_completed', 'actual_value', 'notes']
+        read_only_fields = ('id',)
 # 10. الهدف الصحي
 class HealthGoalSerializer(serializers.ModelSerializer):
     class Meta:
@@ -394,3 +399,24 @@ class HealthStatusSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+# ==============================================================================
+# 19. سيرياليزر للأدوية (Medication)
+# ==============================================================================
+
+class MedicationSerializer(serializers.ModelSerializer):
+    """سيرياليزر للأدوية"""
+    class Meta:
+        model = Medication
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+
+class UserMedicationSerializer(serializers.ModelSerializer):
+    """سيرياليزر لأدوية المستخدم"""
+    medication_name = serializers.CharField(source='medication.brand_name', read_only=True)
+    medication_generic = serializers.CharField(source='medication.generic_name', read_only=True)
+    
+    class Meta:
+        model = UserMedication
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at')
