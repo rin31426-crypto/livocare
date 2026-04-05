@@ -46,9 +46,7 @@ urlpatterns = [
     # ==========================================================================
     # 📁 باقي المسارات (main app)
     # ==========================================================================
-    path('api/', include('main.urls')),  # ✅ هذا السطر يضيف api/ مرة واحدة
-    path('api/auth/', include('allauth.urls')),  # هذا سيوفر /api/auth/google/login/
-    path('accounts/', include('allauth.urls')),  # مسار بديل
+
 ]
 
 if settings.DEBUG:
