@@ -1,7 +1,7 @@
-// google-auth-service.js
 const express = require('express');
 const { OAuth2Client } = require('google-auth-library');
 const axios = require('axios');
+const cors = require('cors');  // ✅ أضف هذا
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -12,8 +12,14 @@ const googleClient = new OAuth2Client(
     process.env.GOOGLE_REDIRECT_URI
 );
 
+app.use(cors());  // ✅ أضف هذا
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ✅ أضف مسار صحي للتحقق من أن الخدمة تعمل
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // 1. بدء تسجيل الدخول
 app.get('/auth/google', (req, res) => {
@@ -55,6 +61,6 @@ app.get('/auth/google/callback', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {  // ✅ استمع على 0.0.0.0
     console.log(`✅ Google Auth Service running on port ${PORT}`);
 });
