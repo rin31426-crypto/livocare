@@ -81,4 +81,5 @@ urlpatterns = [
     path('medications/user/', views.get_user_medications, name='user-medications'),
     path('medications/user/add/', views.add_user_medication, name='add-user-medication'),
     path('medications/user/<int:user_med_id>/delete/', views.delete_user_medication, name='delete-user-medication'),
+    path('auth/google/', google_auth, name='google_auth'),
 ]

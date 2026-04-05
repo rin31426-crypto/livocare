@@ -2137,3 +2137,50 @@ class HabitLogViewSet(viewsets.ModelViewSet):
             })
         
         return Response(stats_data)
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
+import json
+
+User = get_user_model()
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def google_auth(request):
+    try:
+        data = json.loads(request.body)
+        email = data.get('email')
+        name = data.get('name', '')
+        google_id = data.get('google_id')
+        
+        if not email:
+            return JsonResponse({'error': 'Email is required'}, status=400)
+        
+        # البحث عن مستخدم موجود أو إنشاء جديد
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                'username': email.split('@')[0],
+                'first_name': name.split()[0] if name else '',
+                'last_name': ' '.join(name.split()[1:]) if name else '',
+            }
+        )
+        
+        # إنشاء JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return JsonResponse({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'name': name
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
