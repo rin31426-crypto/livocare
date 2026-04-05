@@ -5,7 +5,7 @@ from main import views
 from rest_framework_simplejwt.views import TokenRefreshView 
 from django.http import JsonResponse  
 from main.views import scan_barcode, advanced_cross_insights
-
+from main.views import google_auth  # ✅ أضف هذا السطر
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
 router.register(r'sleep', views.SleepViewSet, basename='sleep')
