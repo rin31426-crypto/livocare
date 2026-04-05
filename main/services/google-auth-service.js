@@ -1,7 +1,7 @@
 const express = require('express');
 const { OAuth2Client } = require('google-auth-library');
 const axios = require('axios');
-const cors = require('cors');  // ✅ أضف هذا
+const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -12,11 +12,16 @@ const googleClient = new OAuth2Client(
     process.env.GOOGLE_REDIRECT_URI
 );
 
-app.use(cors());  // ✅ أضف هذا
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ أضف مسار صحي للتحقق من أن الخدمة تعمل
+// ✅ مسار رئيسي
+app.get('/', (req, res) => {
+    res.send('Google Auth Service is running! Use /auth/google to login');
+});
+
+// ✅ مسار للتحقق من صحة الخدمة
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -44,7 +49,6 @@ app.get('/auth/google/callback', async (req, res) => {
         
         const payload = ticket.getPayload();
         
-        // ✅ إرسال البيانات إلى خادم Django الرئيسي
         const response = await axios.post(`${process.env.DJANGO_API_URL}/api/auth/google/`, {
             email: payload.email,
             name: payload.name,
@@ -52,7 +56,6 @@ app.get('/auth/google/callback', async (req, res) => {
             picture: payload.picture
         });
         
-        // ✅ تخزين التوكن في localStorage عبر redirect
         res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${response.data.access}`);
         
     } catch (error) {
@@ -61,6 +64,6 @@ app.get('/auth/google/callback', async (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {  // ✅ استمع على 0.0.0.0
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Google Auth Service running on port ${PORT}`);
 });
