@@ -6,12 +6,18 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// ✅ كتابة القيم مباشرة (للتغلب على مشكلة متغيرات البيئة)
-const GOOGLE_CLIENT_ID = '1078379162660-79iiq3dsp2hr8sss8n2o5n9j6q3m9h7b.apps.googleusercontent.com';
-const GOOGLE_CLIENT_SECRET = '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';
-const GOOGLE_REDIRECT_URI = 'https://google-auth-fwz4.onrender.com/auth/google/callback';
-const DJANGO_API_URL = 'https://livocare.onrender.com';
-const FRONTEND_URL = 'https://livocare-fronend.onrender.com';
+// ✅ قراءة المتغيرات من البيئة (هذا هو الأسلوب الصحيح)
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+const DJANGO_API_URL = process.env.DJANGO_API_URL;
+const FRONTEND_URL = process.env.FRONTEND_URL;
+
+// ✅ التحقق من وجود المتغيرات الأساسية
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    console.error('❌ Missing required environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET');
+    process.exit(1);
+}
 
 const googleClient = new OAuth2Client(
     GOOGLE_CLIENT_ID,
@@ -73,5 +79,4 @@ app.get('/auth/google/callback', async (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Google Auth Service running on port ${PORT}`);
-    console.log(`🔑 Using Google Client ID: ${GOOGLE_CLIENT_ID.substring(0, 20)}...`);
 });
