@@ -51,8 +51,57 @@ INSTALLED_APPS = [
     'corsheaders',
     'analytics',
     'whitenoise.runserver_nostatic',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+]
+# ==============================================================================
+# 🔐 Social Authentication (Google)
+# ==============================================================================
+
+# ✅ إعدادات allauth
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
+SITE_ID = 1
+
+# ✅ إعدادات Google OAuth
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'OAUTH_PKCE_ENABLED': True,
+    }
+}
+
+# ✅ إعدادات الحساب
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_EMAIL_VERIFICATION = 'optional'  # أو 'mandatory' إذا أردت تأكيد البريد
+ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
+ACCOUNT_USERNAME_REQUIRED = True
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+
+# ✅ بعد المصادقة
+LOGIN_REDIRECT_URL = '/dashboard/'
+LOGOUT_REDIRECT_URL = '/'
+# ==============================================================================
+# 🔑 Google OAuth Keys
+# ==============================================================================
+
+# ✅ تحتاج إلى إنشاء هذه المفاتيح من Google Cloud Console
+# https://console.cloud.google.com/apis/credentials
+
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get('GOOGLE_OAUTH2_KEY', '')
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get('GOOGLE_OAUTH2_SECRET', '')
 # ==============================================================================
 # 🛡️ Middleware
 # ==============================================================================
@@ -67,6 +116,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'livocare.urls'
