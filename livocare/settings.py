@@ -6,20 +6,17 @@ from pathlib import Path
 from datetime import timedelta
 import os
 import dj_database_url
-from dotenv import load_dotenv  # ✅ أضف هذا السطر
+from dotenv import load_dotenv
 
-# تحميل متغيرات البيئة
-load_dotenv()  # ✅ الآن تعمل
+load_dotenv()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ... باقي الكود كما هو
 # ==============================================================================
-# 🔐 الإعدادات الأساسية - ستتغير حسب البيئة
+# 🔐 الإعدادات الأساسية
 # ==============================================================================
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-4kacw%ml**w+9)5#-2939q#!!6cb7#a%tlb@inl$cwa-&%io_)')
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-...')
 
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
@@ -33,12 +30,12 @@ ALLOWED_HOSTS = [
 ]
 
 # ==============================================================================
-# 📦 التطبيقات المثبتة
+# 📦 التطبيقات المثبتة (مبسطة)
 # ==============================================================================
 
 INSTALLED_APPS = [
     'django_extensions',
-    'sslserver',  # ✅ مرة واحدة فقط!
+    'sslserver',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -51,64 +48,15 @@ INSTALLED_APPS = [
     'corsheaders',
     'analytics',
     'whitenoise.runserver_nostatic',
-    'django.contrib.sites',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-]
-# ==============================================================================
-# 🔐 Social Authentication (Google)
-# ==============================================================================
-
-# ✅ إعدادات allauth
-AUTHENTICATION_BACKENDS = [
-    'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-SITE_ID = 1
-
-# ✅ إعدادات Google OAuth
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        },
-        'OAUTH_PKCE_ENABLED': True,
-    }
-}
-
-# ✅ إعدادات الحساب
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = 'optional'  # أو 'mandatory' إذا أردت تأكيد البريد
-ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
-ACCOUNT_USERNAME_REQUIRED = True
-ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
-
-# ✅ بعد المصادقة
-LOGIN_REDIRECT_URL = '/dashboard/'
-LOGOUT_REDIRECT_URL = '/'
 # ==============================================================================
-# 🔑 Google OAuth Keys
-# ==============================================================================
-
-# ✅ تحتاج إلى إنشاء هذه المفاتيح من Google Cloud Console
-# https://console.cloud.google.com/apis/credentials
-
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get('GOOGLE_OAUTH2_KEY', '')
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get('GOOGLE_OAUTH2_SECRET', '')
-# ==============================================================================
-# 🛡️ Middleware
+# 🛡️ Middleware (مبسطة)
 # ==============================================================================
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # ✅ الأول
-    'django.middleware.common.CommonMiddleware',  # ✅ الثاني
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -116,7 +64,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'livocare.urls'
@@ -163,18 +110,10 @@ else:
 # ==============================================================================
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # ==============================================================================
@@ -229,36 +168,28 @@ SIMPLE_JWT = {
 # ==============================================================================
 # 🔗 CORS
 # ==============================================================================
-# ==============================================================================
-# 🔗 CORS
-# ==============================================================================
 
-# ✅ إزالة السطر المكرر
-# CORS_ALLOW_ALL_ORIGINS = False  # ❌ أزل هذا
-
-# ✅ هذه الإعدادات الصحيحة
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
     "https://livocare-fronend.onrender.com",
     "https://camera-service-fag3.onrender.com",
+    "https://google-auth.onrender.com",  # ✅ أضف خدمة Google Auth
 ]
 
-# ✅ السماح لجميع النطاقات الفرعية من onrender.com
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.onrender\.com$",
     r"^https://.*\.railway\.app$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-
-# ✅ فقط للتطوير المحلي - اجعله False في الإنتاج
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # هذا صحيح
+CORS_ALLOW_ALL_ORIGINS = DEBUG
 
 CSRF_TRUSTED_ORIGINS = [
     "https://livocare-fronend.onrender.com",
     "https://camera-service-fag3.onrender.com",
+    "https://google-auth.onrender.com",  # ✅ أضف خدمة Google Auth
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
@@ -289,4 +220,3 @@ OPENFOODFACTS_ENABLED = True
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
 GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
-
