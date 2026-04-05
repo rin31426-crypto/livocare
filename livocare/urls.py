@@ -1,4 +1,3 @@
-# livocare/urls.py
 """
 URL configuration for livocare project.
 """
@@ -44,9 +43,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # ==========================================================================
-    # 📁 باقي المسارات (main app)
+    # 📁 باقي المسارات (main app) - ✅ أضف هذا السطر
     # ==========================================================================
-
+    path('api/', include('main.urls')),  # ✅ هذا السطر هو الحل
 ]
 
 if settings.DEBUG:
