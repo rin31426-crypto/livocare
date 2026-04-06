@@ -4,7 +4,11 @@ from datetime import timedelta
 from main.models import Notification, HealthStatus, Sleep, MoodEntry, PhysicalActivity, Meal, HabitDefinition, HabitLog
 from django.db.models import Avg, Sum
 import random
-
+from main.models import Notification, HealthStatus, Sleep, MoodEntry, PhysicalActivity, Meal, HabitDefinition, HabitLog
+from django.db.models import Avg, Sum
+import random
+from django.utils import timezone
+from datetime import timedelta
 class NotificationService:
     """خدمة إنشاء الإشعارات التلقائية - نسخة متكاملة"""
     

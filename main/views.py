@@ -1267,6 +1267,24 @@ class NotificationViewSet(BaseUserViewSet):
         
         serializer = self.get_serializer(notification)
         return Response(serializer.data, status=201)
+    @action(detail=False, methods=['post'])
+    def generate_auto(self, request):
+
+        from main.services.notification_service import NotificationService
+        
+        try:
+            count = NotificationService.generate_all_notifications(request.user)
+            
+            return Response({
+                'success': True,
+                'message': f'تم إنشاء {count} إشعار جديد',
+                'count': count
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================
