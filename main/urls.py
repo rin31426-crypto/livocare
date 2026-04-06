@@ -55,16 +55,20 @@ urlpatterns = [
     # 🧠 تحليلات ذكية متكاملة
     path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
     path('cross-insights/', views.cross_insights, name='cross-insights'),
+  urlpatterns = [
+    # ... مسارات أخرى ...
     
-     # 🔔 مسارات الإشعارات
-     path('notifications/unread-count/', views.NotificationViewSet.as_view({'get': 'unread_count'}), name='notification-unread-count'),
-     path('notifications/mark-all-read/', views.NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
-     path('notifications/stats/', views.NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
-     path('notifications/recent/', views.NotificationViewSet.as_view({'get': 'recent'}), name='notification-recent'),
-     path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
-     path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
-     path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),  # ✅ أضف هذا
+    # 🔔 مسارات الإشعارات
+    path('notifications/unread-count/', views.NotificationViewSet.as_view({'get': 'unread_count'}), name='notification-unread-count'),
+    path('notifications/mark-all-read/', views.NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
+    path('notifications/stats/', views.NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
+    path('notifications/recent/', views.NotificationViewSet.as_view({'get': 'recent'}), name='notification-recent'),
+    path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
+    path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
+    path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),  # ✅ هذا السطر يجب أن يكون هنا
     
+    # ... مسارات أخرى ...
+]
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
     
