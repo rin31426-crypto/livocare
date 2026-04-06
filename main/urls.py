@@ -5,7 +5,7 @@ from main import views
 from rest_framework_simplejwt.views import TokenRefreshView 
 from django.http import JsonResponse  
 from main.views import scan_barcode, advanced_cross_insights
-from main.views import google_auth  # ✅ أضف هذا السطر
+from main.views import google_auth
 
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
@@ -25,8 +25,7 @@ router.register(r'notifications', views.NotificationViewSet, basename='notificat
 router.register(r'environment-data', views.EnvironmentDataViewSet, basename='environment-data')
 router.register(r'users', views.UserProfileViewSet, basename='users')
 
-# main/urls.py - النسخة الصحيحة
-
+# ✅ نسخة واحدة فقط من urlpatterns
 urlpatterns = [
     # ✅ مسار تجديد التوكن
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
@@ -34,7 +33,7 @@ urlpatterns = [
     # ✅ مسار التحليلات المتقدمة
     path('advanced-insights/', advanced_cross_insights, name='advanced-insights'),
     
-    # ✅ المسار الرئيسي للـ router (بدون api/)
+    # ✅ المسار الرئيسي للـ router
     path('', include(router.urls)),
     
     # 🌤️ الطقس
@@ -55,8 +54,6 @@ urlpatterns = [
     # 🧠 تحليلات ذكية متكاملة
     path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
     path('cross-insights/', views.cross_insights, name='cross-insights'),
-  urlpatterns = [
-    # ... مسارات أخرى ...
     
     # 🔔 مسارات الإشعارات
     path('notifications/unread-count/', views.NotificationViewSet.as_view({'get': 'unread_count'}), name='notification-unread-count'),
@@ -65,10 +62,8 @@ urlpatterns = [
     path('notifications/recent/', views.NotificationViewSet.as_view({'get': 'recent'}), name='notification-recent'),
     path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
     path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
-    path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),  # ✅ هذا السطر يجب أن يكون هنا
+    path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),
     
-    # ... مسارات أخرى ...
-]
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
     
@@ -81,11 +76,13 @@ urlpatterns = [
     path('watch/history/', views.watch_history, name='watch_history'),
     path('watch/adb-data/', views.adb_watch_data, name='adb_watch_data'),
     
-    # 🩺 الأدوية (بدون api/)
+    # 🩺 الأدوية
     path('medications/search/', views.search_medication, name='search-medication'),
     path('medications/<int:medication_id>/', views.get_medication_details, name='medication-details'),
     path('medications/user/', views.get_user_medications, name='user-medications'),
     path('medications/user/add/', views.add_user_medication, name='add-user-medication'),
     path('medications/user/<int:user_med_id>/delete/', views.delete_user_medication, name='delete-user-medication'),
+    
+    # ✅ Google Auth
     path('auth/google/', google_auth, name='google_auth'),
 ]
