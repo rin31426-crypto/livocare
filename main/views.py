@@ -2225,3 +2225,13 @@ def generate_notifications_now(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+# في دالة إنشاء HealthStatus (عند إضافة قراءة جديدة)
+def perform_create(self, serializer):
+    instance = serializer.save(user=self.request.user)
+    
+    # ✅ إنشاء إشعارات تلقائية بعد حفظ البيانات
+    from main.services.notification_service import NotificationService
+    NotificationService.generate_all_notifications(self.request.user)
+    
+    return instance
