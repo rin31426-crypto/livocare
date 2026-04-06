@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse  
 from main.views import scan_barcode, advanced_cross_insights
 from main.views import google_auth
-
+from main.views import generate_notifications_now
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
 router.register(r'sleep', views.SleepViewSet, basename='sleep')
@@ -63,7 +63,7 @@ urlpatterns = [
     path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
     path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
     path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),
-    
+    path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
     

@@ -2203,3 +2203,25 @@ def google_auth(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_notifications_now(request):
+    """توليد إشعارات تلقائية - مسار مستقل تماماً"""
+    from main.services.notification_service import NotificationService
+    
+    try:
+        count = NotificationService.generate_all_notifications(request.user)
+        return Response({
+            'success': True,
+            'message': f'✅ تم إنشاء {count} إشعار جديد',
+            'count': count
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
