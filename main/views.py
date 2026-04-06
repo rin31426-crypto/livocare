@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics, viewsets
 from .services.cross_insights_service import HealthInsightsEngine
 from django.utils import timezone
+from main.services.notification_service import NotificationService
 from .models import (
     PhysicalActivity, Sleep, MoodEntry, HealthStatus, Meal, 
     FoodItem, HabitDefinition, HabitLog, HealthGoal, 
