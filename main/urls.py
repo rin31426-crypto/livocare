@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse  
 from main.views import scan_barcode, advanced_cross_insights
 from main.views import google_auth
+from django.urls import path, include
 from main.views import generate_notifications_now
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
