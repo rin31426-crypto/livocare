@@ -13,7 +13,6 @@ dj-database-url==2.3.0
 python-dotenv==1.0.1
 pillow==10.4.0
 numpy==2.2.6
-pytz==2025.1
 python-dateutil==2.9.0.post0
 requests==2.32.3
 google-genai==1.65.0
@@ -21,7 +20,6 @@ google-generativeai==0.8.4
 pandas==2.2.3
 scikit-learn==1.6.1
 pyzbar==0.1.9
-opencv-python==4.10.0.84
 requests==2.32.3
 django-webpush==0.3.6
 pywebpush==2.3.0
