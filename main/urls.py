@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from main.views import scan_barcode, advanced_cross_insights
 from main.views import google_auth
 from django.urls import path, include
+from main.views import trigger_notifications
 from main.views import generate_notifications_now
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
@@ -65,6 +66,7 @@ urlpatterns = [
      path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
      path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),
      path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
+     path('trigger-notifications/', trigger_notifications, name='trigger-notifications'),
 
      # ✅ أضف هذين المسارين للإشعارات الفورية
      path('notifications/save-push-subscription/', views.NotificationViewSet.as_view({'post': 'save_push_subscription'}), name='save-push-subscription'),
