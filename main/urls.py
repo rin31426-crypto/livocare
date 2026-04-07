@@ -90,5 +90,7 @@ path('notifications/send-push/', views.NotificationViewSet.as_view({'post': 'sen
     
     # ✅ Google Auth
     path('auth/google/', google_auth, name='google_auth'),
+        # ✅ مسار Push Notifications
+    path('push-subscribe/', views.push_subscribe, name='push-subscribe'),
  
 ]
