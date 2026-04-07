@@ -56,15 +56,19 @@ urlpatterns = [
     path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
     path('cross-insights/', views.cross_insights, name='cross-insights'),
     
-    # 🔔 مسارات الإشعارات
-    path('notifications/unread-count/', views.NotificationViewSet.as_view({'get': 'unread_count'}), name='notification-unread-count'),
-    path('notifications/mark-all-read/', views.NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
-    path('notifications/stats/', views.NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
-    path('notifications/recent/', views.NotificationViewSet.as_view({'get': 'recent'}), name='notification-recent'),
-    path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
-    path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
-    path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),
-    path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
+     # 🔔 مسارات الإشعارات
+     path('notifications/unread-count/', views.NotificationViewSet.as_view({'get': 'unread_count'}), name='notification-unread-count'),
+     path('notifications/mark-all-read/', views.NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
+     path('notifications/stats/', views.NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
+     path('notifications/recent/', views.NotificationViewSet.as_view({'get': 'recent'}), name='notification-recent'),
+     path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
+     path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
+     path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),
+     path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
+
+     # ✅ أضف هذين المسارين للإشعارات الفورية
+     path('notifications/save-push-subscription/', views.NotificationViewSet.as_view({'post': 'save_push_subscription'}), name='save-push-subscription'),
+path('notifications/send-push/', views.NotificationViewSet.as_view({'post': 'send_push'}), name='send-push'),
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
     
