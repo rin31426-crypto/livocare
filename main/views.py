@@ -1337,12 +1337,22 @@ from django.core.management import call_command
 from django.http import JsonResponse
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["POST", "GET"])
 def trigger_notifications(request):
     """Endpoint لتشغيل الإشعارات من cron-job.org"""
+    
+    # للاختبار: الرد على GET requests
+    if request.method == 'GET':
+        return JsonResponse({
+            'status': 'ok', 
+            'message': 'Cron job endpoint is working. Use POST to trigger notifications.',
+            'instructions': 'Send a POST request to this URL to generate daily notifications'
+        })
+    
+    # معالجة POST requests
     try:
         call_command('generate_daily_notifications')
-        return JsonResponse({'success': True, 'message': 'Notifications generated'})
+        return JsonResponse({'success': True, 'message': 'Notifications generated successfully'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 # ==============================================================================
