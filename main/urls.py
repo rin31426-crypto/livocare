@@ -86,6 +86,5 @@ urlpatterns = [
     
     # ✅ Google Auth
     path('auth/google/', google_auth, name='google_auth'),
-        # ... مسارات أخرى ...
-    path('webpush/', include('webpush.urls')), 
+ 
 ]

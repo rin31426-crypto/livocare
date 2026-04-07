@@ -989,11 +989,10 @@ def cross_insights(request):
             'success': False,
             'error': str(e)
         }, status=500)
-
-# 11. الإشعارات - نسخة كاملة ومحسنة
+# 11. الإشعارات - نسخة كاملة ومحسنة مع دعم Push Notifications
 class NotificationViewSet(BaseUserViewSet):
     """
-    ViewSet متكامل لإدارة الإشعارات
+    ViewSet متكامل لإدارة الإشعارات مع دعم الإشعارات الفورية
     """
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
@@ -1025,7 +1024,6 @@ class NotificationViewSet(BaseUserViewSet):
             is_archived=False
         ).update(is_read=True, read_at=timezone.now())
         
-        # جلب العدد الجديد
         count = Notification.objects.filter(
             user=request.user,
             is_read=False,
@@ -1042,7 +1040,7 @@ class NotificationViewSet(BaseUserViewSet):
     def mark_read(self, request, pk=None):
         """تحديد إشعار معين كمقروء"""
         notification = self.get_object()
-        notification.mark_as_read()  # استخدام الدالة من الموديل
+        notification.mark_as_read()
         
         return Response({
             'status': 'success',
@@ -1054,9 +1052,7 @@ class NotificationViewSet(BaseUserViewSet):
         """تصفية الإشعارات حسب النوع"""
         notification_type = request.query_params.get('type')
         if not notification_type:
-            return Response({
-                'error': 'معامل type مطلوب'
-            }, status=400)
+            return Response({'error': 'معامل type مطلوب'}, status=400)
         
         notifications = self.get_queryset().filter(type=notification_type)
         serializer = self.get_serializer(notifications, many=True)
@@ -1071,9 +1067,7 @@ class NotificationViewSet(BaseUserViewSet):
         """تصفية الإشعارات حسب الأولوية"""
         priority = request.query_params.get('priority')
         if not priority:
-            return Response({
-                'error': 'معامل priority مطلوب'
-            }, status=400)
+            return Response({'error': 'معامل priority مطلوب'}, status=400)
         
         notifications = self.get_queryset().filter(priority=priority)
         serializer = self.get_serializer(notifications, many=True)
@@ -1131,7 +1125,6 @@ class NotificationViewSet(BaseUserViewSet):
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
         
-        # إحصائيات أساسية
         total = Notification.objects.filter(
             user=request.user,
             is_archived=False
@@ -1145,30 +1138,24 @@ class NotificationViewSet(BaseUserViewSet):
         
         read = total - unread
         
-        # إحصائيات حسب النوع
         by_type = Notification.objects.filter(
             user=request.user,
             is_archived=False
         ).values('type').annotate(count=Count('id'))
-        
         type_dict = {item['type']: item['count'] for item in by_type}
         
-        # إحصائيات حسب الأولوية
         by_priority = Notification.objects.filter(
             user=request.user,
             is_archived=False
         ).values('priority').annotate(count=Count('id'))
-        
         priority_dict = {item['priority']: item['count'] for item in by_priority}
         
-        # آخر 7 أيام
         last_7_days = Notification.objects.filter(
             user=request.user,
             sent_at__date__gte=week_ago,
             is_archived=False
         ).count()
         
-        # آخر 30 يوم
         last_30_days = Notification.objects.filter(
             user=request.user,
             sent_at__date__gte=month_ago,
@@ -1194,7 +1181,6 @@ class NotificationViewSet(BaseUserViewSet):
             is_archived=True
         ).order_by('-sent_at')
         
-        # دعم التصفية حسب الصفحات
         page = self.paginate_queryset(archived)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -1209,9 +1195,7 @@ class NotificationViewSet(BaseUserViewSet):
         notification_ids = request.data.get('ids', [])
         
         if not notification_ids:
-            return Response({
-                'error': 'قائمة ids مطلوبة'
-            }, status=400)
+            return Response({'error': 'قائمة ids مطلوبة'}, status=400)
         
         count = Notification.objects.filter(
             user=request.user,
@@ -1230,9 +1214,7 @@ class NotificationViewSet(BaseUserViewSet):
         """البحث في الإشعارات"""
         query = request.query_params.get('q', '')
         if len(query) < 2:
-            return Response({
-                'error': 'الاستعلام يجب أن يكون حرفين على الأقل'
-            }, status=400)
+            return Response({'error': 'الاستعلام يجب أن يكون حرفين على الأقل'}, status=400)
         
         notifications = self.get_queryset().filter(
             Q(title__icontains=query) | Q(message__icontains=query)
@@ -1248,13 +1230,9 @@ class NotificationViewSet(BaseUserViewSet):
     
     @action(detail=False, methods=['post'])
     def create_test_notification(self, request):
-        """
-        إنشاء إشعار تجريبي (للتطوير والاختبار فقط)
-        """
-        if not request.user.is_staff:  # فقط للمشرفين
-            return Response({
-                'error': 'غير مصرح به'
-            }, status=403)
+        """إنشاء إشعار تجريبي (للتطوير والاختبار فقط)"""
+        if not request.user.is_staff:
+            return Response({'error': 'غير مصرح به'}, status=403)
         
         notification = Notification.objects.create(
             user=request.user,
@@ -1268,14 +1246,14 @@ class NotificationViewSet(BaseUserViewSet):
         
         serializer = self.get_serializer(notification)
         return Response(serializer.data, status=201)
+    
     @action(detail=False, methods=['post'])
     def generate_auto(self, request):
-
+        """توليد إشعارات تلقائية"""
         from main.services.notification_service import NotificationService
         
         try:
             count = NotificationService.generate_all_notifications(request.user)
-            
             return Response({
                 'success': True,
                 'message': f'تم إنشاء {count} إشعار جديد',
@@ -1286,6 +1264,52 @@ class NotificationViewSet(BaseUserViewSet):
                 'success': False,
                 'error': str(e)
             }, status=500)
+    
+    # ✅ إضافة مسار لحفظ اشتراك Push Notification
+    @action(detail=False, methods=['post'])
+    def save_push_subscription(self, request):
+        """حفظ اشتراك Push Notification للمستخدم"""
+        try:
+            subscription = request.data
+            # حفظ الاشتراك في جلسة المستخدم أو قاعدة بيانات
+            request.session['push_subscription'] = subscription
+            return Response({
+                'success': True,
+                'message': 'تم حفظ الاشتراك بنجاح'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+    
+    # ✅ إضافة مسار لإرسال إشعار فوري
+    @action(detail=False, methods=['post'])
+    def send_push(self, request):
+        """إرسال إشعار فوري للمستخدم"""
+        try:
+            title = request.data.get('title', 'LivoCare')
+            message = request.data.get('message', '')
+            
+            # إنشاء إشعار في قاعدة البيانات
+            notification = Notification.objects.create(
+                user=request.user,
+                type='push',
+                priority='medium',
+                icon='🔔',
+                title=title,
+                message=message,
+                sent_at=timezone.now()
+            )
+            
+            # هنا يمكن إضافة منطق إرسال push notification عبر Service Worker
+            # سيتم التعامل معه من خلال الواجهة الأمامية
+            
+            serializer = self.get_serializer(notification)
+            return Response({
+                'success': True,
+                'message': 'تم إرسال الإشعار',
+                'notification': serializer.data
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================
