@@ -48,8 +48,13 @@ INSTALLED_APPS = [
     'corsheaders',
     'analytics',
     'whitenoise.runserver_nostatic',
+    'webpush',
 ]
-
+WEBPUSH_SETTINGS = {
+    "VAPID_PUBLIC_KEY": "BHlznz8R_5JWZ7C-JtA-kV60tNuqOU4vdW55C9p8iIhU6hJIHiJSH3SpkvYT_0HB81yj_P2Wv0IT5mG_YNmjf4E",
+    "VAPID_PRIVATE_KEY": "_QIay_MCjUoCV8S_WPD6uSUuB9F-AMLpkNc445jDTxA",
+    "VAPID_ADMIN_EMAIL": "rin31426@gmail.com"
+}
 # ==============================================================================
 # 🛡️ Middleware (مبسطة)
 # ==============================================================================

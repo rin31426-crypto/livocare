@@ -20,14 +20,14 @@ class Command(BaseCommand):
             user_notifications = 0
             self.stdout.write(f"\n🔔 جاري معالجة المستخدم: {user.username}")
             
-            # استخدام خدمة الإشعارات الموجودة
-            service_notifications = NotificationService.generate_all_notifications(user)
-            if service_notifications:
-                user_notifications += len(service_notifications)
-                self.stdout.write(f"   ✅ من الخدمة: {len(service_notifications)} إشعار")
+            # ✅ استخدام خدمة الإشعارات الموجودة (تعيد عدد الإشعارات)
+            service_count = NotificationService.generate_all_notifications(user)
+            if service_count:
+                user_notifications += service_count
+                self.stdout.write(f"   ✅ من الخدمة: {service_count} إشعار")
             
-            # إضافة تذكيرات بالعادات اليومية
-            habits = HabitDefinition.objects.filter(user=user)
+            # ✅ إضافة تذكيرات بالعادات اليومية
+            habits = HabitDefinition.objects.filter(user=user, is_active=True)
             for habit in habits:
                 logged_today = HabitLog.objects.filter(
                     habit=habit,
@@ -55,6 +55,31 @@ class Command(BaseCommand):
                         )
                         user_notifications += 1
                         self.stdout.write(f"   ✅ إشعار عادة: {habit.name}")
+            
+            # ✅ إضافة تذكير المساء (إذا كان الوقت مناسباً)
+            current_hour = timezone.now().hour
+            if 18 <= current_hour <= 20:  # بين 6 و 8 مساءً
+                evening_reminder_exists = Notification.objects.filter(
+                    user=user,
+                    type='reminder',
+                    title__icontains='المساء',
+                    sent_at__date=today
+                ).exists()
+                
+                if not evening_reminder_exists:
+                    Notification.objects.create(
+                        user=user,
+                        type='reminder',
+                        priority='medium',
+                        icon='🌙',
+                        title='🌙 تذكير المساء',
+                        message='كيف كان يومك؟ لا تنسى تسجيل نشاطك ومزاجك اليوم',
+                        action_url='/mood',
+                        action_text='سجل الآن',
+                        sent_at=timezone.now()
+                    )
+                    user_notifications += 1
+                    self.stdout.write(f"   ✅ إشعار مسائي")
             
             if user_notifications > 0:
                 self.stdout.write(
