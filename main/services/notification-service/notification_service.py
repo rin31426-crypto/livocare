@@ -4,30 +4,37 @@ from datetime import timedelta
 from main.models import Notification, HealthStatus, Sleep, MoodEntry, PhysicalActivity, Meal, HabitDefinition, HabitLog
 from django.db.models import Avg, Sum
 import random
-from webpush import send_user_notification
 from django.core.mail import send_mail
 from django.conf import settings
+import requests
+import os
+
+# ✅ رابط خدمة الإشعارات المستقلة
+NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL', 'https://notification-service-2xej.onrender.com')
 
 class NotificationService:
     """خدمة إنشاء الإشعارات التلقائية مع دعم Push Notifications والإيميل"""
     
     @staticmethod
     def send_push_notification(user, title, message, icon=None, url='/'):
-        """إرسال إشعار فوري للمستخدم"""
+        """إرسال إشعار فوري عبر الخدمة المستقلة"""
         try:
-            payload = {
-                'head': title,
-                'body': message,
-                'icon': icon or '/logo192.png',
-                'url': url,
-                'badge': '/badge-icon.png',
-                'vibrate': [200, 100, 200],
-                'requireInteraction': True
-            }
-            
-            send_user_notification(user=user, payload=payload, ttl=86400)
-            print(f"📱 Push notification sent to {user.username}: {title}")
-            return True
+            response = requests.post(
+                f'{NOTIFICATION_SERVICE_URL}/notify/{user.id}',
+                json={
+                    'title': title,
+                    'body': message,
+                    'icon': icon or '/logo192.png',
+                    'url': url
+                },
+                timeout=5
+            )
+            if response.status_code == 200:
+                print(f"📱 Push notification sent to {user.username}: {title}")
+                return True
+            else:
+                print(f"❌ Push failed: {response.status_code}")
+                return False
         except Exception as e:
             print(f"❌ Failed to send push: {e}")
             return False
@@ -53,6 +60,7 @@ class NotificationService:
             print(f"❌ Email failed: {e}")
             return False
     
+  
     @staticmethod
     def check_health_alerts(user):
         """فحص التنبيهات الصحية"""
