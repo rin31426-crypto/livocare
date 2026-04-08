@@ -1163,7 +1163,7 @@ class NotificationViewSet(BaseUserViewSet):
             return Response({'success': True, 'message': f'تم إنشاء {count} إشعار جديد', 'count': count})
         except Exception as e:
             return Response({'success': False, 'error': str(e)}, status=500)
-            
+
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
@@ -1192,6 +1192,26 @@ def trigger_notifications(request):
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def push_subscribe(request):
+    """حفظ اشتراك Push Notification"""
+    try:
+        data = request.data
+        print("📱 Push subscription received:", data)
+        # حفظ الاشتراك (يمكنك حفظه في قاعدة البيانات لاحقاً)
+        request.session['push_subscription'] = data
+        return Response({
+            'success': True,
+            'message': 'Subscription saved successfully'
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================
