@@ -28,21 +28,19 @@ ALLOWED_HOSTS = [
     '.railway.app',
     'livocare.onrender.com',
 ]
-# Email settings for SendGrid
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.sendgrid.net'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'apikey'  # ثابت لـ SendGrid
-EMAIL_HOST_PASSWORD = os.environ.get('SENDGRID_API_KEY', '')
-DEFAULT_FROM_EMAIL = 'noreply@livocare.com'  # ✅ استخدم بريداً ثابتاً
+
 # ==============================================================================
-# 🔔 خدمة الإشعارات المستقلة
+# 🔔 خدمات خارجية مستقلة
 # ==============================================================================
 
-NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL', 'https://notification-service.onrender.com')
+# خدمة الإشعارات (Push Notifications)
+NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL', 'https://notification-service-2xej.onrender.com')
+
+# خدمة البريد الإلكتروني
+EMAIL_SERVICE_URL = os.environ.get('EMAIL_SERVICE_URL', 'https://email-service-zc0r.onrender.com')
+
 # ==============================================================================
-# 📦 التطبيقات المثبتة (مبسطة)
+# 📦 التطبيقات المثبتة (مبسطة - تم إزالة webpush)
 # ==============================================================================
 
 INSTALLED_APPS = [
@@ -61,8 +59,9 @@ INSTALLED_APPS = [
     'analytics',
     'whitenoise.runserver_nostatic',
 ]
+
 # ==============================================================================
-# 🛡️ Middleware (مبسطة)
+# 🛡️ Middleware
 # ==============================================================================
 
 MIDDLEWARE = [
@@ -177,7 +176,7 @@ SIMPLE_JWT = {
 }
 
 # ==============================================================================
-# 🔗 CORS
+# 🔗 CORS - إضافة خدمات جديدة
 # ==============================================================================
 
 CORS_ALLOWED_ORIGINS = [
@@ -186,7 +185,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.8.187:8000",
     "https://livocare-fronend.onrender.com",
     "https://camera-service-fag3.onrender.com",
-    "https://google-auth.onrender.com",  # ✅ أضف خدمة Google Auth
+    "https://google-auth.onrender.com",
+    "https://notification-service-2xej.onrender.com",  # ✅ خدمة الإشعارات
+    "https://email-service-zc0r.onrender.com",        # ✅ خدمة البريد
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
@@ -200,7 +201,9 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 CSRF_TRUSTED_ORIGINS = [
     "https://livocare-fronend.onrender.com",
     "https://camera-service-fag3.onrender.com",
-    "https://google-auth.onrender.com",  # ✅ أضف خدمة Google Auth
+    "https://google-auth.onrender.com",
+    "https://notification-service-2xej.onrender.com",  # ✅ خدمة الإشعارات
+    "https://email-service-zc0r.onrender.com",        # ✅ خدمة البريد
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
@@ -231,3 +234,15 @@ OPENFOODFACTS_ENABLED = True
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
 GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+
+# ==============================================================================
+# ⚡ تحسينات الأداء والذاكرة
+# ==============================================================================
+
+# تقليل عدد العمال لتوفير الذاكرة
+if not DEBUG:
+    WEB_CONCURRENCY = 1
+    GUNICORN_TIMEOUT = 120
+
+# لا تحتفظ بالاتصالات مفتوحة لتوفير الذاكرة
+CONN_MAX_AGE = 0

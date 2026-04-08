@@ -4,13 +4,14 @@ from datetime import timedelta
 from main.models import Notification, HealthStatus, Sleep, MoodEntry, PhysicalActivity, Meal, HabitDefinition, HabitLog
 from django.db.models import Avg, Sum
 import random
-from django.core.mail import send_mail
-from django.conf import settings
 import requests
 import os
 
 # ✅ رابط خدمة الإشعارات المستقلة
 NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL', 'https://notification-service-2xej.onrender.com')
+
+# ✅ رابط خدمة البريد المستقلة
+EMAIL_SERVICE_URL = os.environ.get('EMAIL_SERVICE_URL', 'https://email-service-zc0r.onrender.com')
 
 class NotificationService:
     """خدمة إنشاء الإشعارات التلقائية مع دعم Push Notifications والإيميل"""
@@ -41,25 +42,31 @@ class NotificationService:
     
     @staticmethod
     def send_email_notification(user, title, message):
-        """إرسال إشعار عبر البريد الإلكتروني"""
+        """إرسال إشعار عبر خدمة البريد المستقلة"""
         if not user.email:
             print(f"❌ No email for {user.username}")
             return False
         
         try:
-            send_mail(
-                subject=f'🔔 LivoCare: {title}',
-                message=message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-                fail_silently=False,
+            response = requests.post(
+                f'{EMAIL_SERVICE_URL}/send',
+                json={
+                    'to': user.email,
+                    'subject': f'🔔 LivoCare: {title}',
+                    'message': message
+                },
+                timeout=5
             )
-            print(f"📧 Email sent to {user.email}: {title}")
-            return True
+            if response.status_code == 200:
+                print(f"📧 Email sent to {user.email}: {title}")
+                return True
+            else:
+                print(f"❌ Email failed: {response.status_code}")
+                return False
         except Exception as e:
-            print(f"❌ Email failed: {e}")
+            print(f"❌ Email service error: {e}")
             return False
-    
+     
   
     @staticmethod
     def check_health_alerts(user):
