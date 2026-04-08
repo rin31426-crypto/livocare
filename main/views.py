@@ -1341,42 +1341,23 @@ User = get_user_model()
 
 @csrf_exempt
 def trigger_notifications(request):
-    if request.method == 'GET':
-        return JsonResponse({
-            'status': 'ok', 
-            'message': 'Cron job endpoint is working. Use POST to trigger notifications.'
-        })
-    
     if request.method == 'POST':
         try:
-            users = User.objects.filter(is_active=True)
+            # معالجة 2 مستخدم فقط كل مرة
+            users = User.objects.filter(is_active=True)[:2]
             total_count = 0
-            errors = []
             
             for user in users:
-                try:
-                    count = NotificationService.generate_all_notifications(user)
-                    total_count += count
-                except Exception as e:
-                    errors.append({
-                        'user': user.username,
-                        'error': str(e)
-                    })
+                count = NotificationService.generate_all_notifications(user)
+                total_count += count
             
             return JsonResponse({
                 'success': True, 
-                'message': f'Notifications generated for {users.count()} users',
-                'total_notifications': total_count,
-                'errors': errors if errors else None
+                'message': f'Processed {users.count()} users',
+                'notifications': total_count
             })
         except Exception as e:
-            return JsonResponse({
-                'success': False, 
-                'error': str(e),
-                'traceback': traceback.format_exc()
-            }, status=500)
-    
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+            return JsonResponse({'error': str(e)}, status=500)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================
