@@ -5,9 +5,11 @@ from main.models import Notification, HealthStatus, Sleep, MoodEntry, PhysicalAc
 from django.db.models import Avg, Sum
 import random
 from webpush import send_user_notification
+from django.core.mail import send_mail
+from django.conf import settings
 
 class NotificationService:
-    """خدمة إنشاء الإشعارات التلقائية مع دعم Push Notifications"""
+    """خدمة إنشاء الإشعارات التلقائية مع دعم Push Notifications والإيميل"""
     
     @staticmethod
     def send_push_notification(user, title, message, icon=None, url='/'):
@@ -28,6 +30,27 @@ class NotificationService:
             return True
         except Exception as e:
             print(f"❌ Failed to send push: {e}")
+            return False
+    
+    @staticmethod
+    def send_email_notification(user, title, message):
+        """إرسال إشعار عبر البريد الإلكتروني"""
+        if not user.email:
+            print(f"❌ No email for {user.username}")
+            return False
+        
+        try:
+            send_mail(
+                subject=f'🔔 LivoCare: {title}',
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+            print(f"📧 Email sent to {user.email}: {title}")
+            return True
+        except Exception as e:
+            print(f"❌ Email failed: {e}")
             return False
     
     @staticmethod
@@ -52,14 +75,8 @@ class NotificationService:
                     'suggestions': ['استشر أخصائي تغذية', 'زد نشاطك البدني', 'قلل السكريات']
                 }
                 notifications.append(notif)
-                # ✅ إرسال Push فوري
-                NotificationService.send_push_notification(
-                    user, 
-                    notif['title'], 
-                    notif['message'],
-                    icon=notif['icon'],
-                    url='/health'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
             elif weight < 50:
                 notif = {
                     'type': 'health',
@@ -70,9 +87,8 @@ class NotificationService:
                     'suggestions': ['تحتاج تغذية غنية بالسعرات', 'استشر أخصائي تغذية']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/health'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         # 2. فحص الضغط
         if latest.systolic_pressure and latest.diastolic_pressure:
@@ -89,9 +105,8 @@ class NotificationService:
                     'suggestions': ['قلل الملح', 'مارس المشي', 'استشر طبيباً']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/health'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
             elif systolic < 90 or diastolic < 60:
                 notif = {
                     'type': 'health',
@@ -102,9 +117,8 @@ class NotificationService:
                     'suggestions': ['اشرب ماء', 'تناول وجبة خفيفة', 'استشر طبيباً']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/health'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         # 3. فحص السكر
         if latest.blood_glucose:
@@ -119,9 +133,8 @@ class NotificationService:
                     'suggestions': ['قلل الحلويات', 'تناول وجبات صغيرة', 'راقب سكرك']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/health'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
             elif glucose < 70:
                 notif = {
                     'type': 'health',
@@ -132,9 +145,8 @@ class NotificationService:
                     'suggestions': ['تناول عصير', 'كل تمرة', 'لا تتأخر في الوجبات']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/health'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         return notifications
     
@@ -162,9 +174,8 @@ class NotificationService:
                     'suggestions': ['أطفئ الأضواء', 'ابتعد عن الشاشات', 'اشرب شاي أعشاب']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         # 2. تحليل جودة النوم (صباحاً)
         if 8 <= now.hour <= 10:
@@ -186,9 +197,8 @@ class NotificationService:
                         'suggestions': ['حاول النوم مبكراً الليلة', 'تجنب الكافيين بعد العصر']
                     }
                     notifications.append(notif)
-                    NotificationService.send_push_notification(
-                        user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep'
-                    )
+                    NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep')
+                    NotificationService.send_email_notification(user, notif['title'], notif['message'])
                 elif hours > 9:
                     notif = {
                         'type': 'sleep',
@@ -199,9 +209,8 @@ class NotificationService:
                         'suggestions': ['النوم الطويل قد يسبب الخمول', 'حاول تنظيم نومك']
                     }
                     notifications.append(notif)
-                    NotificationService.send_push_notification(
-                        user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep'
-                    )
+                    NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep')
+                    NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         return notifications
     
@@ -231,9 +240,8 @@ class NotificationService:
                     'action_text': 'سجل الآن'
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url=notif['action_url']
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url=notif['action_url'])
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         return notifications
     
@@ -262,9 +270,8 @@ class NotificationService:
                     'suggestions': ['🥚 بيض + خبز أسمر', '🥣 شوفان مع فواكه', '🥑 توست مع أفوكادو']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/nutrition'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/nutrition')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         # 2. تذكير بالغداء (12-2 ظهراً)
         if 12 <= now.hour <= 14:
@@ -284,9 +291,8 @@ class NotificationService:
                     'suggestions': ['🍗 بروتين', '🥗 سلطة', '🍚 كربوهيدرات']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/nutrition'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/nutrition')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         # 3. تذكير بالعشاء (6-8 مساءً)
         if 18 <= now.hour <= 20:
@@ -306,9 +312,8 @@ class NotificationService:
                     'suggestions': ['🥛 زبادي', '🍎 فاكهة', '🌿 شاي أعشاب']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/nutrition'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/nutrition')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         return notifications
     
@@ -335,9 +340,8 @@ class NotificationService:
                     'suggestions': ['🚶 امشِ 30 دقيقة', '🧘 تمارين تمدد', '🏃 10 دقائق فقط']
                 }
                 notifications.append(notif)
-                NotificationService.send_push_notification(
-                    user, notif['title'], notif['message'], icon=notif['icon'], url='/activities'
-                )
+                NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/activities')
+                NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         return notifications
     
@@ -357,9 +361,8 @@ class NotificationService:
                 'suggestions': ['استمر في تتبع صحتك']
             }
             notifications.append(notif)
-            NotificationService.send_push_notification(
-                user, notif['title'], notif['message'], icon=notif['icon'], url='/health'
-            )
+            NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/health')
+            NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         sleep_count = Sleep.objects.filter(user=user).count()
         if sleep_count > 0 and sleep_count % 7 == 0:
@@ -372,9 +375,8 @@ class NotificationService:
                 'message': f'أكملت {weeks} أسابيع من تتبع النوم'
             }
             notifications.append(notif)
-            NotificationService.send_push_notification(
-                user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep'
-            )
+            NotificationService.send_push_notification(user, notif['title'], notif['message'], icon=notif['icon'], url='/sleep')
+            NotificationService.send_email_notification(user, notif['title'], notif['message'])
         
         return notifications
     
@@ -409,7 +411,11 @@ class NotificationService:
         ).exists()
         
         if not tip_exists and random.random() < 0.3:
-            all_notifications.append(NotificationService.get_daily_tip())
+            tip = NotificationService.get_daily_tip()
+            all_notifications.append(tip)
+            # إرسال Push وإيميل للنصيحة اليومية
+            NotificationService.send_push_notification(user, tip['title'], tip['message'], icon=tip['icon'], url='/')
+            NotificationService.send_email_notification(user, tip['title'], tip['message'])
         
         created_count = 0
         for notif_data in all_notifications:
