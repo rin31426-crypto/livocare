@@ -60,7 +60,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'analytics',
     'whitenoise.runserver_nostatic',
-    'webpush',
 ]
 # ==============================================================================
 # 🛡️ Middleware (مبسطة)
