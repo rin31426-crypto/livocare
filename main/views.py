@@ -1333,11 +1333,16 @@ def push_subscribe(request):
     
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from main.services.notification_service import NotificationService
 
 @csrf_exempt
 def trigger_notifications(request):
     if request.method == 'POST':
-        return JsonResponse({'success': True, 'message': 'Test OK'})
+        try:
+            # مجرد محاولة استيراد
+            return JsonResponse({'success': True, 'message': 'Import OK'})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
