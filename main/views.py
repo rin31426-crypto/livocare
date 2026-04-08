@@ -1334,17 +1334,48 @@ def push_subscribe(request):
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
+from main.services.notification_service import NotificationService
+import traceback
 
 User = get_user_model()
 
 @csrf_exempt
 def trigger_notifications(request):
+    if request.method == 'GET':
+        return JsonResponse({
+            'status': 'ok', 
+            'message': 'Cron job endpoint is working. Use POST to trigger notifications.'
+        })
+    
     if request.method == 'POST':
         try:
             users = User.objects.filter(is_active=True)
-            return JsonResponse({'success': True, 'users_count': users.count()})
+            total_count = 0
+            errors = []
+            
+            for user in users:
+                try:
+                    count = NotificationService.generate_all_notifications(user)
+                    total_count += count
+                except Exception as e:
+                    errors.append({
+                        'user': user.username,
+                        'error': str(e)
+                    })
+            
+            return JsonResponse({
+                'success': True, 
+                'message': f'Notifications generated for {users.count()} users',
+                'total_notifications': total_count,
+                'errors': errors if errors else None
+            })
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return JsonResponse({
+                'success': False, 
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }, status=500)
+    
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
