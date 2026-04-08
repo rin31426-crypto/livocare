@@ -1163,6 +1163,35 @@ class NotificationViewSet(BaseUserViewSet):
             return Response({'success': True, 'message': f'تم إنشاء {count} إشعار جديد', 'count': count})
         except Exception as e:
             return Response({'success': False, 'error': str(e)}, status=500)
+            
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.contrib.auth import get_user_model
+from main.services.notification_service import NotificationService
+
+User = get_user_model()
+
+@csrf_exempt
+def trigger_notifications(request):
+    """Endpoint لتشغيل الإشعارات من cron-job.org"""
+    if request.method == 'POST':
+        try:
+            users = User.objects.filter(is_active=True)
+            total_count = 0
+            
+            for user in users:
+                count = NotificationService.generate_all_notifications(user)
+                total_count += count
+            
+            return JsonResponse({
+                'success': True, 
+                'message': f'Processed {users.count()} users',
+                'notifications': total_count
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================
