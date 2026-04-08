@@ -1332,29 +1332,20 @@ def push_subscribe(request):
         return Response({'error': str(e)}, status=500)
 
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.core.management import call_command
 from django.http import JsonResponse
+from django.core.management import call_command
+import time
 
 @csrf_exempt
-@require_http_methods(["POST", "GET"])
 def trigger_notifications(request):
-    """Endpoint لتشغيل الإشعارات من cron-job.org"""
-    
-    # للاختبار: الرد على GET requests
-    if request.method == 'GET':
-        return JsonResponse({
-            'status': 'ok', 
-            'message': 'Cron job endpoint is working. Use POST to trigger notifications.',
-            'instructions': 'Send a POST request to this URL to generate daily notifications'
-        })
-    
-    # معالجة POST requests
-    try:
-        call_command('generate_daily_notifications')
-        return JsonResponse({'success': True, 'message': 'Notifications generated successfully'})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+    if request.method == 'POST':
+        time.sleep(2)  # انتظر ثانيتين لتجنب الضغط
+        try:
+            call_command('generate_daily_notifications')
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================
