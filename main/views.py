@@ -1333,6 +1333,7 @@ def push_subscribe(request):
     
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from django.core.management import call_command
 import traceback
 
 @csrf_exempt
@@ -1345,11 +1346,11 @@ def trigger_notifications(request):
     
     if request.method == 'POST':
         try:
-            # ✅ نسخة مبسطة - فقط للاختبار
+            # ✅ تشغيل الأمر الحقيقي
+            call_command('generate_daily_notifications')
             return JsonResponse({
                 'success': True, 
-                'message': 'Test successful (notifications not actually generated)',
-                'note': 'This is a test response'
+                'message': 'Notifications generated successfully'
             })
         except Exception as e:
             return JsonResponse({
