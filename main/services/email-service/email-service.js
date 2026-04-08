@@ -19,6 +19,15 @@ const transporter = nodemailer.createTransport({
 app.use(cors());
 app.use(express.json());
 
+// ✅ مسار الصحة (للتحقق من أن الخدمة تعمل)
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        service: 'email-service',
+        timestamp: new Date().toISOString() 
+    });
+});
+
 // إرسال بريد
 app.post('/send', async (req, res) => {
     const { to, subject, message } = req.body;
@@ -30,11 +39,20 @@ app.post('/send', async (req, res) => {
             subject: subject,
             text: message
         });
+        console.log(`📧 Email sent to ${to}: ${subject}`);
         res.json({ success: true });
     } catch (error) {
         console.error('Email error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
+});
+
+// مسار ترحيبي بسيط
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'Email Service is running',
+        endpoints: ['POST /send', 'GET /health']
+    });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
