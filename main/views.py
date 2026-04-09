@@ -378,6 +378,8 @@ def get_weather(request):
 
 # main/views.py
 
+# main/views.py - استبدل دالة search_food بهذه النسخة
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def search_food(request):
@@ -389,16 +391,30 @@ def search_food(request):
         if not query:
             return Response({
                 'success': False,
-                'error': 'الرجاء إدخال اسم الطعام'
+                'error': 'الرجاء إدخال اسم الطعام',
+                'data': []
             }, status=400)
         
         print(f"🔍 Food search request: {query}")
         
-        # ✅ استخدام Open Food Facts API
+        # ✅ استيراد requests داخل الدالة
         import requests
-        url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={requests.utils.quote(query)}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,generic_name,brands,nutriments,image_front_small_url,serving_size"
+        from urllib.parse import quote
         
-        response = requests.get(url, timeout=10, headers={'User-Agent': 'LivocareApp/1.0'})
+        # ✅ بناء URL البحث
+        encoded_query = quote(query)
+        url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={encoded_query}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,generic_name,brands,nutriments,image_front_small_url,serving_size"
+        
+        print(f"📡 Fetching from: {url}")
+        
+        # ✅ إرسال الطلب مع User-Agent مناسب
+        headers = {
+            'User-Agent': 'LivocareApp/1.0 (https://livocare.onrender.com)'
+        }
+        
+        response = requests.get(url, timeout=15, headers=headers)
+        
+        print(f"📡 Response status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
@@ -408,15 +424,33 @@ def search_food(request):
                 nutriments = product.get('nutriments', {})
                 product_name = product.get('product_name') or product.get('generic_name')
                 
-                if product_name:  # فقط المنتجات التي لها اسم
+                # فقط المنتجات التي لها اسم صالح
+                if product_name and len(product_name) > 1:
+                    # استخراج القيم الغذائية
+                    calories = nutriments.get('energy-kcal') or nutriments.get('energy') or 0
+                    protein = nutriments.get('proteins') or 0
+                    carbs = nutriments.get('carbohydrates') or 0
+                    fat = nutriments.get('fat') or 0
+                    fiber = nutriments.get('fiber') or 0
+                    
+                    # تحويل القيم إلى أرقام
+                    try:
+                        calories = float(calories) if calories else 0
+                        protein = float(protein) if protein else 0
+                        carbs = float(carbs) if carbs else 0
+                        fat = float(fat) if fat else 0
+                        fiber = float(fiber) if fiber else 0
+                    except (ValueError, TypeError):
+                        calories = protein = carbs = fat = fiber = 0
+                    
                     products.append({
                         'id': product.get('code'),
                         'name': product_name,
-                        'calories': nutriments.get('energy-kcal') or nutriments.get('energy') or 0,
-                        'protein': nutriments.get('proteins') or 0,
-                        'carbs': nutriments.get('carbohydrates') or 0,
-                        'fat': nutriments.get('fat') or 0,
-                        'fiber': nutriments.get('fiber') or 0,
+                        'calories': round(calories, 1),
+                        'protein': round(protein, 1),
+                        'carbs': round(carbs, 1),
+                        'fat': round(fat, 1),
+                        'fiber': round(fiber, 1),
                         'image': product.get('image_front_small_url'),
                         'brand': product.get('brands')
                     })
@@ -429,14 +463,24 @@ def search_food(request):
                 'count': len(products)
             })
         else:
+            print(f"⚠️ Open Food Facts returned status {response.status_code}")
             return Response({
                 'success': False,
                 'error': 'فشل في الاتصال بقاعدة البيانات',
                 'data': []
             }, status=500)
         
+    except requests.exceptions.Timeout:
+        print("❌ Timeout while fetching from Open Food Facts")
+        return Response({
+            'success': False,
+            'error': 'انتهت مهلة الاتصال، حاول مرة أخرى',
+            'data': []
+        }, status=500)
     except Exception as e:
         print(f"❌ Error in search_food: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response({
             'success': False,
             'error': str(e),
