@@ -376,9 +376,14 @@ def get_weather(request):
             'error': str(e)
         }, status=500)
 
+# main/views.py
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def search_food(request):
+    """
+    البحث عن الطعام باستخدام Open Food Facts API
+    """
     try:
         query = request.query_params.get('query', '')
         if not query:
@@ -389,19 +394,53 @@ def search_food(request):
         
         print(f"🔍 Food search request: {query}")
         
-        service = NutritionService()
-        results = service.search_food(query)
+        # ✅ استخدام Open Food Facts API
+        import requests
+        url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={requests.utils.quote(query)}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,generic_name,brands,nutriments,image_front_small_url,serving_size"
         
-        return Response({
-            'success': True,
-            'data': results
-        })
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'LivocareApp/1.0'})
+        
+        if response.status_code == 200:
+            data = response.json()
+            products = []
+            
+            for product in data.get('products', []):
+                nutriments = product.get('nutriments', {})
+                product_name = product.get('product_name') or product.get('generic_name')
+                
+                if product_name:  # فقط المنتجات التي لها اسم
+                    products.append({
+                        'id': product.get('code'),
+                        'name': product_name,
+                        'calories': nutriments.get('energy-kcal') or nutriments.get('energy') or 0,
+                        'protein': nutriments.get('proteins') or 0,
+                        'carbs': nutriments.get('carbohydrates') or 0,
+                        'fat': nutriments.get('fat') or 0,
+                        'fiber': nutriments.get('fiber') or 0,
+                        'image': product.get('image_front_small_url'),
+                        'brand': product.get('brands')
+                    })
+            
+            print(f"✅ Found {len(products)} products for '{query}'")
+            
+            return Response({
+                'success': True,
+                'data': products,
+                'count': len(products)
+            })
+        else:
+            return Response({
+                'success': False,
+                'error': 'فشل في الاتصال بقاعدة البيانات',
+                'data': []
+            }, status=500)
         
     except Exception as e:
         print(f"❌ Error in search_food: {str(e)}")
         return Response({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'data': []
         }, status=500)
 
 # أضف هذا في أعلى الملف مع الاستيرادات الأخرى
