@@ -1091,27 +1091,18 @@ User = get_user_model()
 # ✅ رابط خدمة الإشعارات الخارجية
 NOTIFICATION_SERVICE_URL = getattr(settings, 'NOTIFICATION_SERVICE_URL', 'https://notification-service-2xej.onrender.com')
 
-
 class NotificationViewSet(viewsets.GenericViewSet):
     """
     ViewSet للتواصل مع خدمة الإشعارات الخارجية
     """
     permission_classes = [IsAuthenticated]
     
-    def _request_to_service(self, endpoint, method='GET', data=None, user_id=None):
-        """
-        إرسال طلب إلى خدمة الإشعارات الخارجية
-        """
+    def _request_to_service(self, endpoint, method='GET', data=None):
+        """إرسال طلب إلى خدمة الإشعارات الخارجية"""
         url = f"{NOTIFICATION_SERVICE_URL}/api/{endpoint}"
         headers = {'Content-Type': 'application/json'}
-        
-        # إضافة user_id إذا لم يتم تمريره
-        if user_id is None and hasattr(self, 'request') and self.request.user.is_authenticated:
-            user_id = self.request.user.id
-        
         payload = data or {}
-        if user_id:
-            payload['user_id'] = user_id
+        payload['user_id'] = self.request.user.id
         
         try:
             if method.upper() == 'GET':
@@ -1126,24 +1117,14 @@ class NotificationViewSet(viewsets.GenericViewSet):
             if response.status_code == 200:
                 return response.json()
             else:
-                return {'success': False, 'error': f'Service error: {response.status_code}', 'details': response.text}
+                return {'success': False, 'error': f'Service error: {response.status_code}'}
                 
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout connecting to notification service: {url}")
-            return {'success': False, 'error': 'خدمة الإشعارات لا تستجيب (Timeout)'}
-        except requests.exceptions.ConnectionError:
-            logger.error(f"Connection error to notification service: {url}")
-            return {'success': False, 'error': 'لا يمكن الاتصال بخدمة الإشعارات'}
         except Exception as e:
-            logger.error(f"Error calling notification service: {e}")
             return {'success': False, 'error': str(e)}
     
-    # =========================================================
-    # 1. الإشعارات الأساسية
-    # =========================================================
-    
+    # ✅ استخدم اسم مختلف بدلاً من 'list'
     @action(detail=False, methods=['get'])
-    def list(self, request):
+    def get_all(self, request):
         """جلب قائمة الإشعارات"""
         limit = request.query_params.get('limit', 50)
         result = self._request_to_service('notifications/', 'GET', {'limit': limit})
@@ -1179,17 +1160,12 @@ class NotificationViewSet(viewsets.GenericViewSet):
         result = self._request_to_service(f'notifications/{pk}/delete/', 'DELETE')
         return Response(result)
     
-    # =========================================================
-    # 2. التصفية والبحث
-    # =========================================================
-    
     @action(detail=False, methods=['get'])
     def by_type(self, request):
         """تصفية الإشعارات حسب النوع"""
         notification_type = request.query_params.get('type')
         if not notification_type:
             return Response({'success': False, 'error': 'معامل type مطلوب'}, status=400)
-        
         result = self._request_to_service('notifications/by-type/', 'GET', {'type': notification_type})
         return Response(result)
     
@@ -1199,7 +1175,6 @@ class NotificationViewSet(viewsets.GenericViewSet):
         priority = request.query_params.get('priority')
         if not priority:
             return Response({'success': False, 'error': 'معامل priority مطلوب'}, status=400)
-        
         result = self._request_to_service('notifications/by-priority/', 'GET', {'priority': priority})
         return Response(result)
     
@@ -1208,11 +1183,7 @@ class NotificationViewSet(viewsets.GenericViewSet):
         """البحث في الإشعارات"""
         query = request.query_params.get('q', '').strip()
         if len(query) < 2:
-            return Response({
-                'success': False,
-                'error': 'الاستعلام يجب أن يكون حرفين على الأقل'
-            }, status=400)
-        
+            return Response({'success': False, 'error': 'الاستعلام يجب أن يكون حرفين على الأقل'}, status=400)
         result = self._request_to_service('notifications/search/', 'GET', {'q': query})
         return Response(result)
     
@@ -1223,19 +1194,11 @@ class NotificationViewSet(viewsets.GenericViewSet):
         result = self._request_to_service('notifications/recent/', 'GET', {'limit': limit})
         return Response(result)
     
-    # =========================================================
-    # 3. الإحصائيات
-    # =========================================================
-    
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """إحصائيات الإشعارات"""
         result = self._request_to_service('notifications/stats/', 'GET')
         return Response(result)
-    
-    # =========================================================
-    # 4. الأرشفة
-    # =========================================================
     
     @action(detail=False, methods=['get'])
     def archived(self, request):
@@ -1255,16 +1218,11 @@ class NotificationViewSet(viewsets.GenericViewSet):
         result = self._request_to_service('notifications/archive-all-read/', 'POST')
         return Response(result)
     
-    # =========================================================
-    # 5. توليد الإشعارات
-    # =========================================================
-    
     @action(detail=False, methods=['post'])
     def generate(self, request):
         """توليد إشعارات تلقائية للمستخدم الحالي"""
         result = self._request_to_service('notifications/generate/', 'POST')
         return Response(result)
-
 
 # =========================================================
 # 6. Endpoints خارجية (لـ cron jobs)
