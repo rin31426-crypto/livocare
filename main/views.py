@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model
 import requests
 import json
 import logging
-
+from rest_framework import permissions
 from .models import (
     PhysicalActivity, Sleep, MoodEntry, HealthStatus, Meal, 
     FoodItem, HabitDefinition, HabitLog, HealthGoal, 
