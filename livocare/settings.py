@@ -27,10 +27,11 @@ ALLOWED_HOSTS = [
     '.onrender.com',
     '.railway.app',
     'livocare.onrender.com',
+    'livocare-fronend.onrender.com',
 ]
 
 # ==============================================================================
-# 🔔 خدمات خارجية مستقلة
+# 🔔 خدمات خارجية مستقلة - الإشعارات
 # ==============================================================================
 
 # خدمة الإشعارات (Push Notifications)
@@ -39,8 +40,20 @@ NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL', 'https://n
 # خدمة البريد الإلكتروني
 EMAIL_SERVICE_URL = os.environ.get('EMAIL_SERVICE_URL', 'https://email-service-zc0r.onrender.com')
 
+# ✅ إعدادات الإشعارات الداخلية
+NOTIFICATION_SETTINGS = {
+    'ENABLED': True,
+    'CHECK_INTERVAL_MINUTES': 30,  # التحقق كل 30 دقيقة
+    'MAX_NOTIFICATIONS_PER_USER': 50,  # الحد الأقصى للإشعارات لكل مستخدم
+    'KEEP_DAYS': 30,  # الاحتفاظ بالإشعارات لمدة 30 يوم
+    'PUSH_ENABLED': True,  # تفعيل Push Notifications
+    'EMAIL_ENABLED': True,  # تفعيل الإيميلات
+    'DAILY_TIP_ENABLED': True,  # تفعيل النصائح اليومية
+    'ACHIEVEMENT_ENABLED': True,  # تفعيل إشعارات الإنجازات
+}
+
 # ==============================================================================
-# 📦 التطبيقات المثبتة (مبسطة - تم إزالة webpush)
+# 📦 التطبيقات المثبتة
 # ==============================================================================
 
 INSTALLED_APPS = [
@@ -58,6 +71,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'analytics',
     'whitenoise.runserver_nostatic',
+    # ✅ إضافة تطبيق الإشعارات
+    'notifications',  # إذا كان منفصلاً
 ]
 
 # ==============================================================================
@@ -154,7 +169,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'main.CustomUser'
 
 # ==============================================================================
-# 🚀 REST Framework و JWT
+# 🚀 REST Framework و JWT (تعديل قسم التحديد)
 # ==============================================================================
 
 REST_FRAMEWORK = {
@@ -163,20 +178,23 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
-    )
-}
-
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": True,
-    "ALGORITHM": "HS256",
-    "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "user_id",
+    ),
+    # ✅ إضافة تحديد معدل الطلبات لمنع الـ 429
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '2000/day',      # زيادة للزوار غير المسجلين
+        'user': '5000/day',      # زيادة للمستخدمين المسجلين
+        'notifications': '1000/hour',  # زيادة للإشعارات
+    },
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
 
 # ==============================================================================
-# 🔗 CORS - إضافة خدمات جديدة
+# 🔗 CORS - إضافة خدمات جديدة (تعديل)
 # ==============================================================================
 
 CORS_ALLOWED_ORIGINS = [
@@ -196,7 +214,8 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True  # ✅ غيّر هذا إلى True
+# ⚠️ في الإنتاج، يفضل تعيين هذا إلى False واستخدام CORS_ALLOWED_ORIGINS فقط
+CORS_ALLOW_ALL_ORIGINS = True  # مؤقتاً للتجربة
 
 CSRF_TRUSTED_ORIGINS = [
     "https://livocare-fronend.onrender.com",
@@ -211,38 +230,113 @@ CSRF_TRUSTED_ORIGINS = [
     "https://*.railway.app",
 ]
 
-# ==============================================================================
-# 🔒 إعدادات الأمان للإنتاج
-# ==============================================================================
+# ✅ إضافات CORS للطلبات المتكررة
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
 
-if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-
-# ==============================================================================
-# 🆕 APIs الخارجية
-# ==============================================================================
-
-OPENWEATHER_API_KEY = os.environ.get('OPENWEATHER_API_KEY', '')
-OPENFOODFACTS_ENABLED = True
-RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
-GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # ==============================================================================
-# ⚡ تحسينات الأداء والذاكرة
+# 🔔 إعدادات الإشعارات الإضافية (إضافة)
 # ==============================================================================
 
-# تقليل عدد العمال لتوفير الذاكرة
-if not DEBUG:
-    WEB_CONCURRENCY = 1
-    GUNICORN_TIMEOUT = 120
+# VAPID keys لـ Web Push (للإشعارات الفورية)
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
+VAPID_ADMIN_EMAIL = os.environ.get('VAPID_ADMIN_EMAIL', 'admin@livocare.com')
 
-# لا تحتفظ بالاتصالات مفتوحة لتوفير الذاكرة
-CONN_MAX_AGE = 0
+# ✅ إعدادات التنبيهات الصحية
+HEALTH_ALERTS = {
+    'weight': {
+        'min': 50,
+        'max': 100,
+        'urgent_min': 40,
+        'urgent_max': 120,
+    },
+    'systolic': {
+        'min': 90,
+        'max': 140,
+        'urgent_min': 80,
+        'urgent_max': 160,
+    },
+    'diastolic': {
+        'min': 60,
+        'max': 90,
+        'urgent_min': 50,
+        'urgent_max': 100,
+    },
+    'glucose': {
+        'min': 70,
+        'max': 140,
+        'urgent_min': 60,
+        'urgent_max': 180,
+    },
+}
+
+# ✅ إعدادات توقيت الإشعارات
+NOTIFICATION_TIMING = {
+    'breakfast': {'hour': 8, 'minute': 0},
+    'lunch': {'hour': 13, 'minute': 0},
+    'dinner': {'hour': 19, 'minute': 0},
+    'sleep_reminder': {'hour': 21, 'minute': 0},
+    'activity_reminder': {'hour': 17, 'minute': 0},
+    'daily_tip': {'hour': 10, 'minute': 0},
+}
+
+# ✅ إعدادات إضافية للإشعارات
+NOTIFICATION_BATCH_SIZE = 50  # عدد الإشعارات المرسلة في الدفعة الواحدة
+NOTIFICATION_RETRY_ATTEMPTS = 3  # عدد محاولات إعادة إرسال الإشعار الفاشل
+NOTIFICATION_RETRY_DELAY = 60  # ثواني بين محاولات إعادة الإرسال
+# ✅ إعدادات التنبيهات الصحية
+HEALTH_ALERTS = {
+    'weight': {
+        'min': 50,
+        'max': 100,
+        'urgent_min': 40,
+        'urgent_max': 120,
+    },
+    'systolic': {
+        'min': 90,
+        'max': 140,
+        'urgent_min': 80,
+        'urgent_max': 160,
+    },
+    'diastolic': {
+        'min': 60,
+        'max': 90,
+        'urgent_min': 50,
+        'urgent_max': 100,
+    },
+    'glucose': {
+        'min': 70,
+        'max': 140,
+        'urgent_min': 60,
+        'urgent_max': 180,
+    },
+}
+
+# ✅ إعدادات توقيت الإشعارات
+NOTIFICATION_TIMING = {
+    'breakfast': {'hour': 8, 'minute': 0},
+    'lunch': {'hour': 13, 'minute': 0},
+    'dinner': {'hour': 19, 'minute': 0},
+    'sleep_reminder': {'hour': 21, 'minute': 0},
+    'activity_reminder': {'hour': 17, 'minute': 0},
+    'daily_tip': {'hour': 10, 'minute': 0},
+}

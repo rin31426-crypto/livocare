@@ -1,14 +1,18 @@
 # main/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from main import views
 from rest_framework_simplejwt.views import TokenRefreshView 
 from django.http import JsonResponse  
-from main.views import scan_barcode, advanced_cross_insights
-from main.views import google_auth
-from django.urls import path, include
-from main.views import trigger_notifications
-from main.views import generate_notifications_now
+from main.views import (
+    scan_barcode, advanced_cross_insights, google_auth,
+    trigger_notifications, generate_notifications_now,
+    push_subscribe
+)
+from main import views
+
+# =========================================================
+# ✅ إنشاء الـ Router (مرة واحدة فقط لكل ViewSet)
+# =========================================================
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
 router.register(r'sleep', views.SleepViewSet, basename='sleep')
@@ -23,20 +27,21 @@ router.register(r'conditions', views.ChronicConditionViewSet, basename='conditio
 router.register(r'medical-records', views.MedicalRecordViewSet, basename='medical-records')
 router.register(r'recommendations', views.RecommendationViewSet, basename='recommendations')
 router.register(r'chat-logs', views.ChatLogViewSet, basename='chat-logs')
+# ✅ تسجيل notifications مرة واحدة فقط
 router.register(r'notifications', views.NotificationViewSet, basename='notifications')
 router.register(r'environment-data', views.EnvironmentDataViewSet, basename='environment-data')
 router.register(r'users', views.UserProfileViewSet, basename='users')
 
-# ✅ نسخة واحدة فقط من urlpatterns
-urlpatterns = [
+
+# =========================================================
+# ✅ المسارات الأساسية
+# =========================================================
+base_urls = [
     # ✅ مسار تجديد التوكن
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
     # ✅ مسار التحليلات المتقدمة
     path('advanced-insights/', advanced_cross_insights, name='advanced-insights'),
-    
-    # ✅ المسار الرئيسي للـ router
-    path('', include(router.urls)),
     
     # 🌤️ الطقس
     path('weather/', views.get_weather, name='weather'),
@@ -57,20 +62,6 @@ urlpatterns = [
     path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
     path('cross-insights/', views.cross_insights, name='cross-insights'),
     
-     # 🔔 مسارات الإشعارات
-     path('notifications/unread-count/', views.NotificationViewSet.as_view({'get': 'unread_count'}), name='notification-unread-count'),
-     path('notifications/mark-all-read/', views.NotificationViewSet.as_view({'post': 'mark_all_read'}), name='notification-mark-all-read'),
-     path('notifications/stats/', views.NotificationViewSet.as_view({'get': 'stats'}), name='notification-stats'),
-     path('notifications/recent/', views.NotificationViewSet.as_view({'get': 'recent'}), name='notification-recent'),
-     path('notifications/archive/', views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), name='notification-archive'),
-     path('notifications/delete-all-read/', views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), name='notification-delete-all-read'),
-     path('notifications/generate-auto/', views.NotificationViewSet.as_view({'post': 'generate_auto'}), name='notification-generate-auto'),
-     path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
-     path('trigger-notifications/', trigger_notifications, name='trigger-notifications'),
-
-     # ✅ أضف هذين المسارين للإشعارات الفورية
-     path('notifications/save-push-subscription/', views.NotificationViewSet.as_view({'post': 'save_push_subscription'}), name='save-push-subscription'),
-path('notifications/send-push/', views.NotificationViewSet.as_view({'post': 'send_push'}), name='send-push'),
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
     
@@ -79,6 +70,8 @@ path('notifications/send-push/', views.NotificationViewSet.as_view({'post': 'sen
     
     # ✅ ماسح الباركود
     path('scan-barcode/', scan_barcode, name='scan-barcode'),
+    
+    # ⌚ بيانات الساعة الذكية
     path('watch/health-data/', views.watch_health_data, name='watch_health_data'),
     path('watch/history/', views.watch_history, name='watch_history'),
     path('watch/adb-data/', views.adb_watch_data, name='adb_watch_data'),
@@ -92,7 +85,81 @@ path('notifications/send-push/', views.NotificationViewSet.as_view({'post': 'sen
     
     # ✅ Google Auth
     path('auth/google/', google_auth, name='google_auth'),
-        # ✅ مسار Push Notifications
-    path('push-subscribe/', views.push_subscribe, name='push-subscribe'),
- 
+    
+    # ✅ مسار Push Notifications الأساسي
+    path('push-subscribe/', push_subscribe, name='push-subscribe'),
+]
+
+
+# =========================================================
+# ✅ مسارات الإشعارات المخصصة (لأن الـ router لا يولدها تلقائياً)
+# =========================================================
+notification_custom_urls = [
+    # 📊 إحصائيات وعدادات
+    path('notifications/unread-count/', 
+         views.NotificationViewSet.as_view({'get': 'unread_count'}), 
+         name='notification-unread-count'),
+    
+    path('notifications/stats/', 
+         views.NotificationViewSet.as_view({'get': 'stats'}), 
+         name='notification-stats'),
+    
+    path('notifications/recent/', 
+         views.NotificationViewSet.as_view({'get': 'recent'}), 
+         name='notification-recent'),
+    
+    # ✏️ تحديثات جماعية
+    path('notifications/mark-all-read/', 
+         views.NotificationViewSet.as_view({'post': 'mark_all_read'}), 
+         name='notification-mark-all-read'),
+    
+    path('notifications/delete-all-read/', 
+         views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), 
+         name='notification-delete-all-read'),
+    
+    # 🗄️ أرشفة
+    path('notifications/archive/', 
+         views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), 
+         name='notification-archive'),
+    
+    # 🔄 توليد إشعارات
+    path('notifications/generate-auto/', 
+         views.NotificationViewSet.as_view({'post': 'generate_auto'}), 
+         name='notification-generate-auto'),
+    
+    # 📱 Push Notifications
+    path('notifications/save-push-subscription/', 
+         views.NotificationViewSet.as_view({'post': 'save_push_subscription'}), 
+         name='save-push-subscription'),
+    
+    path('notifications/send-push/', 
+         views.NotificationViewSet.as_view({'post': 'send_push'}), 
+         name='send-push'),
+]
+
+
+# =========================================================
+# ✅ مسارات الإشعارات المجدولة (Cron)
+# =========================================================
+cron_urls = [
+    path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
+    path('trigger-notifications/', trigger_notifications, name='trigger-notifications'),
+]
+
+
+# =========================================================
+# ✅ دمج جميع المسارات
+# =========================================================
+urlpatterns = [
+    # ✅ مسارات الـ Router (تشمل /notifications/ العادي)
+    path('', include(router.urls)),
+    
+    # ✅ مسارات الإشعارات المخصصة
+    *notification_custom_urls,
+    
+    # ✅ مسارات الإشعارات المجدولة
+    *cron_urls,
+    
+    # ✅ المسارات الأساسية
+    *base_urls,
 ]
