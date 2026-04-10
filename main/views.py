@@ -670,6 +670,8 @@ NOTIFICATION_SERVICE_URL = getattr(settings, 'NOTIFICATION_SERVICE_URL', 'https:
 
 # main/views.py - داخل class NotificationViewSet
 
+# main/views.py - الجزء الخاص بالإشعارات
+
 class NotificationViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
     
@@ -692,19 +694,26 @@ class NotificationViewSet(viewsets.GenericViewSet):
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
-    # ✅ أضف هذه الدالة (لأن Frontend يتوقع /notifications/ يعيد قائمة)
+    # ✅ list - هذه دالة مدمجة وليست @action
     def list(self, request):
         """جلب قائمة الإشعارات"""
         limit = request.query_params.get('limit', 50)
         result = self._request_to_service('notifications/', 'GET', {'limit': limit})
         return Response(result)
     
-    # ✅ أضف هذه الدالة للـ retrieve (إذا لزم الأمر)
+    # ✅ retrieve - هذه دالة مدمجة وليست @action
     def retrieve(self, request, pk=None):
         """جلب إشعار محدد"""
         result = self._request_to_service(f'notifications/{pk}/', 'GET')
         return Response(result)
     
+    # ✅ destroy - هذه دالة مدمجة وليست @action
+    def destroy(self, request, pk=None):
+        """حذف إشعار واحد"""
+        result = self._request_to_service(f'notifications/{pk}/delete/', 'DELETE')
+        return Response(result)
+    
+    # ✅ هذه دوال @action (أسماء غير محجوزة)
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
         return Response(self._request_to_service('notifications/unread-count/', 'GET'))
@@ -727,14 +736,9 @@ class NotificationViewSet(viewsets.GenericViewSet):
         return Response(self._request_to_service('notifications/recent/', 'GET', {'limit': limit}))
     
     @action(detail=False, methods=['delete'])
-    def delete_all_read(self, request):
+    def delete_read(self, request):
+        """حذف جميع الإشعارات المقروءة"""
         return Response(self._request_to_service('notifications/delete-read/', 'DELETE'))
-    
-    @action(detail=True, methods=['delete'])
-    def destroy(self, request, pk=None):
-        """حذف إشعار واحد"""
-        return Response(self._request_to_service(f'notifications/{pk}/delete/', 'DELETE'))
-
 @csrf_exempt
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
