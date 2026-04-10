@@ -2337,4 +2337,13 @@ def generate_notifications_now(request):
             'success': False,
             'error': str(e)
         }, status=500)
+# main/views.py
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_achievements(request):
+    """جلب إنجازات المستخدم"""
+    return Response({
+        'success': True,
+        'data': []
+    })

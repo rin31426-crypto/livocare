@@ -88,6 +88,7 @@ base_urls = [
     
     # ✅ مسار Push Notifications الأساسي
     path('push-subscribe/', push_subscribe, name='push-subscribe'),
+    path('achievements/', views.get_user_achievements, name='achievements'),
 ]
 
 
