@@ -1073,40 +1073,70 @@ def cross_insights(request):
             'error': str(e)
         }, status=500)
 # notifications/views.py
+# main/views_notifications.py (ضع هذا الكود في main/views.py)
+import requests
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Q
-from django.utils import timezone
-from datetime import timedelta
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.conf import settings
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model
-import json
-import logging
-
-from .models import Notification
-from .serializers import NotificationSerializer
-from .services import NotificationService
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
+# ✅ رابط خدمة الإشعارات الخارجية
+NOTIFICATION_SERVICE_URL = getattr(settings, 'NOTIFICATION_SERVICE_URL', 'https://notification-service-2xej.onrender.com')
+
 
 class NotificationViewSet(viewsets.GenericViewSet):
     """
-    ViewSet متكامل لإدارة الإشعارات
+    ViewSet للتواصل مع خدمة الإشعارات الخارجية
     """
     permission_classes = [IsAuthenticated]
-    serializer_class = NotificationSerializer
     
-    def get_queryset(self):
-        """جلب إشعارات المستخدم الحالي فقط"""
-        return Notification.objects.filter(
-            user=self.request.user,
-            is_archived=False
-        ).order_by('-sent_at')
+    def _request_to_service(self, endpoint, method='GET', data=None, user_id=None):
+        """
+        إرسال طلب إلى خدمة الإشعارات الخارجية
+        """
+        url = f"{NOTIFICATION_SERVICE_URL}/api/{endpoint}"
+        headers = {'Content-Type': 'application/json'}
+        
+        # إضافة user_id إذا لم يتم تمريره
+        if user_id is None and hasattr(self, 'request') and self.request.user.is_authenticated:
+            user_id = self.request.user.id
+        
+        payload = data or {}
+        if user_id:
+            payload['user_id'] = user_id
+        
+        try:
+            if method.upper() == 'GET':
+                response = requests.get(url, params=payload, timeout=10)
+            elif method.upper() == 'POST':
+                response = requests.post(url, json=payload, headers=headers, timeout=10)
+            elif method.upper() == 'DELETE':
+                response = requests.delete(url, json=payload, headers=headers, timeout=10)
+            else:
+                return {'success': False, 'error': f'Method {method} not supported'}
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {'success': False, 'error': f'Service error: {response.status_code}', 'details': response.text}
+                
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout connecting to notification service: {url}")
+            return {'success': False, 'error': 'خدمة الإشعارات لا تستجيب (Timeout)'}
+        except requests.exceptions.ConnectionError:
+            logger.error(f"Connection error to notification service: {url}")
+            return {'success': False, 'error': 'لا يمكن الاتصال بخدمة الإشعارات'}
+        except Exception as e:
+            logger.error(f"Error calling notification service: {e}")
+            return {'success': False, 'error': str(e)}
     
     # =========================================================
     # 1. الإشعارات الأساسية
@@ -1116,100 +1146,38 @@ class NotificationViewSet(viewsets.GenericViewSet):
     def list(self, request):
         """جلب قائمة الإشعارات"""
         limit = request.query_params.get('limit', 50)
-        try:
-            limit = int(limit)
-        except ValueError:
-            limit = 50
-            
-        notifications = self.get_queryset()[:limit]
-        serializer = self.get_serializer(notifications, many=True)
-        
-        return Response({
-            'success': True,
-            'count': notifications.count(),
-            'results': serializer.data
-        })
+        result = self._request_to_service('notifications/', 'GET', {'limit': limit})
+        return Response(result)
     
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
         """جلب عدد الإشعارات غير المقروءة"""
-        count = Notification.objects.filter(
-            user=request.user,
-            is_read=False,
-            is_archived=False
-        ).count()
-        return Response({'success': True, 'count': count})
+        result = self._request_to_service('notifications/unread-count/', 'GET')
+        return Response(result)
     
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
         """تحديد إشعار كمقروء"""
-        try:
-            notification = Notification.objects.get(id=pk, user=request.user)
-            notification.is_read = True
-            notification.read_at = timezone.now()
-            notification.save()
-            
-            # تحديث العدد غير المقروء
-            unread_count = Notification.objects.filter(
-                user=request.user,
-                is_read=False,
-                is_archived=False
-            ).count()
-            
-            return Response({
-                'success': True,
-                'message': 'تم تحديد الإشعار كمقروء',
-                'unread_count': unread_count
-            })
-        except Notification.DoesNotExist:
-            return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
+        result = self._request_to_service(f'notifications/{pk}/mark-read/', 'POST')
+        return Response(result)
     
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         """تحديد جميع الإشعارات كمقروءة"""
-        updated = Notification.objects.filter(
-            user=request.user,
-            is_read=False,
-            is_archived=False
-        ).update(is_read=True, read_at=timezone.now())
-        
-        unread_count = Notification.objects.filter(
-            user=request.user,
-            is_read=False,
-            is_archived=False
-        ).count()
-        
-        return Response({
-            'success': True,
-            'message': f'تم تحديد {updated} إشعار كمقروء',
-            'unread_count': unread_count,
-            'updated_count': updated
-        })
+        result = self._request_to_service('notifications/mark-all-read/', 'POST')
+        return Response(result)
     
     @action(detail=False, methods=['delete'])
     def delete_read(self, request):
         """حذف جميع الإشعارات المقروءة"""
-        count = Notification.objects.filter(
-            user=request.user,
-            is_read=True,
-            is_archived=False
-        ).delete()[0]
-        
-        return Response({
-            'success': True,
-            'message': f'تم حذف {count} إشعار مقروء',
-            'deleted_count': count
-        })
+        result = self._request_to_service('notifications/delete-read/', 'DELETE')
+        return Response(result)
     
     @action(detail=True, methods=['delete'])
     def delete_one(self, request, pk=None):
         """حذف إشعار واحد"""
-        try:
-            notification = Notification.objects.get(id=pk, user=request.user)
-            notification.delete()
-            return Response({'success': True, 'message': 'تم حذف الإشعار بنجاح'})
-        except Notification.DoesNotExist:
-            return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
+        result = self._request_to_service(f'notifications/{pk}/delete/', 'DELETE')
+        return Response(result)
     
     # =========================================================
     # 2. التصفية والبحث
@@ -1222,13 +1190,8 @@ class NotificationViewSet(viewsets.GenericViewSet):
         if not notification_type:
             return Response({'success': False, 'error': 'معامل type مطلوب'}, status=400)
         
-        notifications = self.get_queryset().filter(type=notification_type)
-        serializer = self.get_serializer(notifications, many=True)
-        return Response({
-            'success': True,
-            'count': notifications.count(),
-            'results': serializer.data
-        })
+        result = self._request_to_service('notifications/by-type/', 'GET', {'type': notification_type})
+        return Response(result)
     
     @action(detail=False, methods=['get'])
     def by_priority(self, request):
@@ -1237,13 +1200,8 @@ class NotificationViewSet(viewsets.GenericViewSet):
         if not priority:
             return Response({'success': False, 'error': 'معامل priority مطلوب'}, status=400)
         
-        notifications = self.get_queryset().filter(priority=priority)
-        serializer = self.get_serializer(notifications, many=True)
-        return Response({
-            'success': True,
-            'count': notifications.count(),
-            'results': serializer.data
-        })
+        result = self._request_to_service('notifications/by-priority/', 'GET', {'priority': priority})
+        return Response(result)
     
     @action(detail=False, methods=['get'])
     def search(self, request):
@@ -1255,76 +1213,25 @@ class NotificationViewSet(viewsets.GenericViewSet):
                 'error': 'الاستعلام يجب أن يكون حرفين على الأقل'
             }, status=400)
         
-        notifications = self.get_queryset().filter(
-            Q(title__icontains=query) | Q(message__icontains=query)
-        )
-        serializer = self.get_serializer(notifications, many=True)
-        
-        return Response({
-            'success': True,
-            'count': notifications.count(),
-            'query': query,
-            'results': serializer.data
-        })
+        result = self._request_to_service('notifications/search/', 'GET', {'q': query})
+        return Response(result)
     
     @action(detail=False, methods=['get'])
     def recent(self, request):
         """آخر الإشعارات"""
         limit = request.query_params.get('limit', 10)
-        try:
-            limit = int(limit)
-        except ValueError:
-            limit = 10
-        
-        notifications = self.get_queryset()[:limit]
-        serializer = self.get_serializer(notifications, many=True)
-        
-        return Response({
-            'success': True,
-            'count': notifications.count(),
-            'results': serializer.data
-        })
+        result = self._request_to_service('notifications/recent/', 'GET', {'limit': limit})
+        return Response(result)
     
     # =========================================================
-    # 3. الإحصائيات (مُحسنة)
+    # 3. الإحصائيات
     # =========================================================
     
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """إحصائيات الإشعارات"""
-        today = timezone.now().date()
-        week_ago = today - timedelta(days=7)
-        month_ago = today - timedelta(days=30)
-        
-        queryset = Notification.objects.filter(user=request.user, is_archived=False)
-        
-        # الإحصائيات الأساسية
-        total = queryset.count()
-        unread = queryset.filter(is_read=False).count()
-        read = total - unread
-        
-        # الإحصائيات حسب النوع
-        by_type = queryset.values('type').annotate(count=Count('id'))
-        type_stats = {item['type']: item['count'] for item in by_type}
-        
-        # الإحصائيات حسب الأولوية
-        by_priority = queryset.values('priority').annotate(count=Count('id'))
-        priority_stats = {item['priority']: item['count'] for item in by_priority}
-        
-        # الإحصائيات الزمنية
-        last_7_days = queryset.filter(sent_at__date__gte=week_ago).count()
-        last_30_days = queryset.filter(sent_at__date__gte=month_ago).count()
-        
-        return Response({
-            'success': True,
-            'total': total,
-            'unread': unread,
-            'read': read,
-            'by_type': type_stats,
-            'by_priority': priority_stats,
-            'last_7_days': last_7_days,
-            'last_30_days': last_30_days
-        })
+        result = self._request_to_service('notifications/stats/', 'GET')
+        return Response(result)
     
     # =========================================================
     # 4. الأرشفة
@@ -1333,43 +1240,20 @@ class NotificationViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['get'])
     def archived(self, request):
         """جلب الإشعارات المؤرشفة"""
-        archived = Notification.objects.filter(
-            user=request.user,
-            is_archived=True
-        ).order_by('-sent_at')
-        
-        serializer = self.get_serializer(archived, many=True)
-        return Response({
-            'success': True,
-            'count': archived.count(),
-            'results': serializer.data
-        })
+        result = self._request_to_service('notifications/archived/', 'GET')
+        return Response(result)
     
     @action(detail=True, methods=['post'])
     def archive(self, request, pk=None):
         """أرشفة إشعار واحد"""
-        try:
-            notification = Notification.objects.get(id=pk, user=request.user)
-            notification.is_archived = True
-            notification.save()
-            return Response({'success': True, 'message': 'تمت أرشفة الإشعار'})
-        except Notification.DoesNotExist:
-            return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
+        result = self._request_to_service(f'notifications/{pk}/archive/', 'POST')
+        return Response(result)
     
     @action(detail=False, methods=['post'])
     def archive_all_read(self, request):
         """أرشفة جميع الإشعارات المقروءة"""
-        count = Notification.objects.filter(
-            user=request.user,
-            is_read=True,
-            is_archived=False
-        ).update(is_archived=True)
-        
-        return Response({
-            'success': True,
-            'message': f'تمت أرشفة {count} إشعار مقروء',
-            'archived_count': count
-        })
+        result = self._request_to_service('notifications/archive-all-read/', 'POST')
+        return Response(result)
     
     # =========================================================
     # 5. توليد الإشعارات
@@ -1378,20 +1262,8 @@ class NotificationViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'])
     def generate(self, request):
         """توليد إشعارات تلقائية للمستخدم الحالي"""
-        try:
-            service = NotificationService()
-            count = service.generate_all_notifications(request.user)
-            return Response({
-                'success': True,
-                'message': f'تم إنشاء {count} إشعار جديد',
-                'count': count
-            })
-        except Exception as e:
-            logger.error(f"Error generating notifications: {e}")
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=500)
+        result = self._request_to_service('notifications/generate/', 'POST')
+        return Response(result)
 
 
 # =========================================================
@@ -1400,41 +1272,49 @@ class NotificationViewSet(viewsets.GenericViewSet):
 
 @csrf_exempt
 @api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
 def trigger_notifications(request):
     """
     Endpoint لتشغيل الإشعارات من cron-job.org أو أي خدمة خارجية
-    يدعم GET و POST
+    يقوم بإرسال طلب إلى خدمة الإشعارات الخارجية لتوليد الإشعارات لجميع المستخدمين
     """
     if request.method not in ['GET', 'POST']:
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
     try:
-        # الحصول على جميع المستخدمين النشطين
-        users = User.objects.filter(is_active=True)
-        total_count = 0
-        errors = []
+        # إرسال طلب إلى خدمة الإشعارات الخارجية
+        url = f"{NOTIFICATION_SERVICE_URL}/api/trigger/"
         
-        for user in users:
-            try:
-                service = NotificationService()
-                count = service.generate_all_notifications(user)
-                total_count += count
-                logger.info(f"Generated {count} notifications for user {user.id}")
-            except Exception as e:
-                errors.append(f"User {user.id}: {str(e)}")
-                logger.error(f"Error for user {user.id}: {e}")
+        response = requests.post(url, timeout=30)
         
-        return JsonResponse({
-            'success': True,
-            'message': f'تمت المعالجة بنجاح',
-            'users_processed': users.count(),
-            'notifications_created': total_count,
-            'errors': errors if errors else None
-        })
-        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': f'Notification service returned {response.status_code}',
+                'details': response.text
+            }, status=response.status_code)
+            
+    except requests.exceptions.Timeout:
+        logger.error("Timeout calling notification service trigger")
+        return JsonResponse({'error': 'خدمة الإشعارات لا تستجيب'}, status=504)
+    except requests.exceptions.ConnectionError:
+        logger.error("Connection error to notification service")
+        return JsonResponse({'error': 'لا يمكن الاتصال بخدمة الإشعارات'}, status=503)
     except Exception as e:
         logger.error(f"Error in trigger_notifications: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def trigger_notifications_cron(request):
+    """
+    نسخة GET لـ cron-job.org
+    """
+    return trigger_notifications(request)
 
 
 # =========================================================
@@ -1444,7 +1324,7 @@ def trigger_notifications(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def push_subscribe(request):
-    """حفظ اشتراك Push Notification"""
+    """حفظ اشتراك Push Notification (يرسل للخدمة الخارجية)"""
     try:
         subscription = request.data
         
@@ -1455,21 +1335,23 @@ def push_subscribe(request):
                 'error': 'بيانات الاشتراك غير صالحة'
             }, status=400)
         
-        # حفظ الاشتراك في جلسة المستخدم أو قاعدة البيانات
-        request.session['push_subscription'] = subscription
+        # إرسال الاشتراك إلى خدمة الإشعارات الخارجية
+        result = NotificationViewSet()._request_to_service(
+            'push/subscribe/', 
+            'POST', 
+            {'subscription': subscription},
+            user_id=request.user.id
+        )
         
-        # يمكنك أيضاً حفظه في قاعدة البيانات
-        # PushSubscription.objects.update_or_create(
-        #     user=request.user,
-        #     endpoint=subscription['endpoint'],
-        #     defaults={'subscription_data': subscription}
-        # )
+        # أيضاً حفظ في الجلسة محلياً للرجوع السريع
+        request.session['push_subscription'] = subscription
         
         logger.info(f"Push subscription saved for user {request.user.id}")
         
         return Response({
             'success': True,
-            'message': 'تم حفظ اشتراك الإشعارات بنجاح'
+            'message': 'تم حفظ اشتراك الإشعارات بنجاح',
+            'details': result
         })
         
     except Exception as e:
@@ -1482,12 +1364,20 @@ def push_subscribe(request):
 def push_unsubscribe(request):
     """إلغاء اشتراك Push Notification"""
     try:
+        # إرسال طلب الإلغاء إلى خدمة الإشعارات
+        result = NotificationViewSet()._request_to_service(
+            'push/unsubscribe/', 
+            'POST',
+            user_id=request.user.id
+        )
+        
         if 'push_subscription' in request.session:
             del request.session['push_subscription']
         
         return Response({
             'success': True,
-            'message': 'تم إلغاء اشتراك الإشعارات بنجاح'
+            'message': 'تم إلغاء اشتراك الإشعارات بنجاح',
+            'details': result
         })
         
     except Exception as e:
@@ -1501,20 +1391,12 @@ def test_push(request):
     """إرسال إشعار تجريبي"""
     try:
         subscription = request.session.get('push_subscription')
-        if not subscription:
-            return Response({
-                'success': False,
-                'error': 'لا يوجد اشتراك Push محفوظ'
-            }, status=400)
         
-        from main.services.webpush import send_push_notification
-        
-        result = send_push_notification(
-            subscription,
-            title="🧪 إشعار تجريبي",
-            body="هذا إشعار تجريبي من تطبيق LivoCare! ✅",
-            icon="/icon-192.png",
-            badge="/badge-72x72.png"
+        # إرسال طلب الاختبار إلى خدمة الإشعارات
+        result = NotificationViewSet()._request_to_service(
+            'push/test/', 
+            'POST',
+            user_id=request.user.id
         )
         
         return Response({
@@ -1526,6 +1408,38 @@ def test_push(request):
     except Exception as e:
         logger.error(f"Error sending test push: {e}")
         return Response({'success': False, 'error': str(e)}, status=500)
+
+
+# =========================================================
+# 8. دالة مساعدة لإرسال إشعار فوري
+# =========================================================
+
+def send_notification_to_user(user_id, title, message, notification_type='info', priority='medium', **kwargs):
+    """
+    دالة مساعدة لإرسال إشعار فوري لمستخدم معين عبر الخدمة الخارجية
+    """
+    try:
+        url = f"{NOTIFICATION_SERVICE_URL}/api/notifications/send/"
+        
+        payload = {
+            'user_id': user_id,
+            'title': title,
+            'message': message,
+            'type': notification_type,
+            'priority': priority,
+            **kwargs
+        }
+        
+        response = requests.post(url, json=payload, timeout=10)
+        
+        if response.status_code == 200:
+            return True, response.json()
+        else:
+            return False, response.text
+            
+    except Exception as e:
+        logger.error(f"Error sending notification: {e}")
+        return False, str(e)
 # ==============================================================================
 # 📊 API خاص بالتقارير الشاملة
 # ==============================================================================

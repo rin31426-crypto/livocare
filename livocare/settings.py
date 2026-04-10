@@ -71,8 +71,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'analytics',
     'whitenoise.runserver_nostatic',
-    # ✅ إضافة تطبيق الإشعارات
-    'notifications',  # إذا كان منفصلاً
 ]
 
 # ==============================================================================
