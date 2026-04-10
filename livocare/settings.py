@@ -34,23 +34,8 @@ ALLOWED_HOSTS = [
 # 🔔 خدمات خارجية مستقلة - الإشعارات
 # ==============================================================================
 
-# خدمة الإشعارات (Push Notifications)
 NOTIFICATION_SERVICE_URL = os.environ.get('NOTIFICATION_SERVICE_URL', 'https://notification-service-2xej.onrender.com')
-
-# خدمة البريد الإلكتروني
 EMAIL_SERVICE_URL = os.environ.get('EMAIL_SERVICE_URL', 'https://email-service-zc0r.onrender.com')
-
-# ✅ إعدادات الإشعارات الداخلية
-NOTIFICATION_SETTINGS = {
-    'ENABLED': True,
-    'CHECK_INTERVAL_MINUTES': 30,  # التحقق كل 30 دقيقة
-    'MAX_NOTIFICATIONS_PER_USER': 50,  # الحد الأقصى للإشعارات لكل مستخدم
-    'KEEP_DAYS': 30,  # الاحتفاظ بالإشعارات لمدة 30 يوم
-    'PUSH_ENABLED': True,  # تفعيل Push Notifications
-    'EMAIL_ENABLED': True,  # تفعيل الإيميلات
-    'DAILY_TIP_ENABLED': True,  # تفعيل النصائح اليومية
-    'ACHIEVEMENT_ENABLED': True,  # تفعيل إشعارات الإنجازات
-}
 
 # ==============================================================================
 # 📦 التطبيقات المثبتة
@@ -167,7 +152,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'main.CustomUser'
 
 # ==============================================================================
-# 🚀 REST Framework و JWT (تعديل قسم التحديد)
+# 🚀 REST Framework و JWT
 # ==============================================================================
 
 REST_FRAMEWORK = {
@@ -177,22 +162,30 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    # ✅ إضافة تحديد معدل الطلبات لمنع الـ 429
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '2000/day',      # زيادة للزوار غير المسجلين
-        'user': '5000/day',      # زيادة للمستخدمين المسجلين
-        'notifications': '1000/hour',  # زيادة للإشعارات
+        'anon': '2000/day',
+        'user': '5000/day',
+        'notifications': '1000/hour',
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
 
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "ALGORITHM": "HS256",
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+}
+
 # ==============================================================================
-# 🔗 CORS - إضافة خدمات جديدة (تعديل)
+# 🔗 CORS
 # ==============================================================================
 
 CORS_ALLOWED_ORIGINS = [
@@ -212,8 +205,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-# ⚠️ في الإنتاج، يفضل تعيين هذا إلى False واستخدام CORS_ALLOWED_ORIGINS فقط
-CORS_ALLOW_ALL_ORIGINS = True  # مؤقتاً للتجربة
+CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "https://livocare-fronend.onrender.com",
@@ -228,66 +220,64 @@ CSRF_TRUSTED_ORIGINS = [
     "https://*.railway.app",
 ]
 
-# ✅ إضافات CORS للطلبات المتكررة
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
+CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
+    'accept', 'accept-encoding', 'authorization', 'content-type',
+    'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
 ]
 
 # ==============================================================================
-# 🔔 إعدادات الإشعارات الإضافية (إضافة)
+# 🌤️ APIs الخارجية
 # ==============================================================================
 
-# VAPID keys لـ Web Push (للإشعارات الفورية)
+OPENWEATHER_API_KEY = os.environ.get('OPENWEATHER_API_KEY', '')
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
+RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
+OPENFOODFACTS_ENABLED = True
+
+# Google OAuth2
+GOOGLE_OAUTH2_KEY = os.environ.get('GOOGLE_OAUTH2_KEY', '')
+GOOGLE_OAUTH2_SECRET = os.environ.get('GOOGLE_OAUTH2_SECRET', '')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'https://google-auth.onrender.com/auth/google/callback')
+
+# Frontend URL
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://livocare-fronend.onrender.com')
+DJANGO_API_URL = os.environ.get('DJANGO_API_URL', 'https://livocare.onrender.com')
+
+# ==============================================================================
+# 🔔 إعدادات الإشعارات
+# ==============================================================================
+
+# VAPID keys لـ Web Push
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
 VAPID_ADMIN_EMAIL = os.environ.get('VAPID_ADMIN_EMAIL', 'admin@livocare.com')
 
-# ✅ إعدادات التنبيهات الصحية
-HEALTH_ALERTS = {
-    'weight': {
-        'min': 50,
-        'max': 100,
-        'urgent_min': 40,
-        'urgent_max': 120,
-    },
-    'systolic': {
-        'min': 90,
-        'max': 140,
-        'urgent_min': 80,
-        'urgent_max': 160,
-    },
-    'diastolic': {
-        'min': 60,
-        'max': 90,
-        'urgent_min': 50,
-        'urgent_max': 100,
-    },
-    'glucose': {
-        'min': 70,
-        'max': 140,
-        'urgent_min': 60,
-        'urgent_max': 180,
-    },
+# إعدادات الإشعارات الداخلية
+NOTIFICATION_SETTINGS = {
+    'ENABLED': True,
+    'CHECK_INTERVAL_MINUTES': 30,
+    'MAX_NOTIFICATIONS_PER_USER': 50,
+    'KEEP_DAYS': 30,
+    'PUSH_ENABLED': True,
+    'EMAIL_ENABLED': True,
+    'DAILY_TIP_ENABLED': True,
+    'ACHIEVEMENT_ENABLED': True,
+    'BATCH_SIZE': 50,
+    'RETRY_ATTEMPTS': 3,
+    'RETRY_DELAY': 60,
 }
 
-# ✅ إعدادات توقيت الإشعارات
+# إعدادات التنبيهات الصحية (مرة واحدة فقط)
+HEALTH_ALERTS = {
+    'weight': {'min': 50, 'max': 100, 'urgent_min': 40, 'urgent_max': 120},
+    'systolic': {'min': 90, 'max': 140, 'urgent_min': 80, 'urgent_max': 160},
+    'diastolic': {'min': 60, 'max': 90, 'urgent_min': 50, 'urgent_max': 100},
+    'glucose': {'min': 70, 'max': 140, 'urgent_min': 60, 'urgent_max': 180},
+}
+
+# إعدادات توقيت الإشعارات (مرة واحدة فقط)
 NOTIFICATION_TIMING = {
     'breakfast': {'hour': 8, 'minute': 0},
     'lunch': {'hour': 13, 'minute': 0},
@@ -297,44 +287,26 @@ NOTIFICATION_TIMING = {
     'daily_tip': {'hour': 10, 'minute': 0},
 }
 
-# ✅ إعدادات إضافية للإشعارات
-NOTIFICATION_BATCH_SIZE = 50  # عدد الإشعارات المرسلة في الدفعة الواحدة
-NOTIFICATION_RETRY_ATTEMPTS = 3  # عدد محاولات إعادة إرسال الإشعار الفاشل
-NOTIFICATION_RETRY_DELAY = 60  # ثواني بين محاولات إعادة الإرسال
-# ✅ إعدادات التنبيهات الصحية
-HEALTH_ALERTS = {
-    'weight': {
-        'min': 50,
-        'max': 100,
-        'urgent_min': 40,
-        'urgent_max': 120,
-    },
-    'systolic': {
-        'min': 90,
-        'max': 140,
-        'urgent_min': 80,
-        'urgent_max': 160,
-    },
-    'diastolic': {
-        'min': 60,
-        'max': 90,
-        'urgent_min': 50,
-        'urgent_max': 100,
-    },
-    'glucose': {
-        'min': 70,
-        'max': 140,
-        'urgent_min': 60,
-        'urgent_max': 180,
-    },
-}
+# ==============================================================================
+# 🔒 إعدادات الأمان للإنتاج
+# ==============================================================================
 
-# ✅ إعدادات توقيت الإشعارات
-NOTIFICATION_TIMING = {
-    'breakfast': {'hour': 8, 'minute': 0},
-    'lunch': {'hour': 13, 'minute': 0},
-    'dinner': {'hour': 19, 'minute': 0},
-    'sleep_reminder': {'hour': 21, 'minute': 0},
-    'activity_reminder': {'hour': 17, 'minute': 0},
-    'daily_tip': {'hour': 10, 'minute': 0},
-}
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# ==============================================================================
+# ⚡ تحسينات الأداء
+# ==============================================================================
+
+if not DEBUG:
+    WEB_CONCURRENCY = 1
+    GUNICORN_TIMEOUT = 120
+    CONN_MAX_AGE = 0
+
