@@ -17,6 +17,7 @@ import requests
 import json
 import logging
 from rest_framework import permissions
+from django.conf import settings
 from .models import (
     PhysicalActivity, Sleep, MoodEntry, HealthStatus, Meal, 
     FoodItem, HabitDefinition, HabitLog, HealthGoal, 
