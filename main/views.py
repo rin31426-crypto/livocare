@@ -935,77 +935,46 @@ def generate_notifications_now(request):
         return Response({'success': True, 'message': f'✅ تم إنشاء {count} إشعار جديد', 'count': count})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
-# ==============================================================================
-# ⌚ بيانات ADB Monitor
-# ==============================================================================
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def adb_watch_data(request):
     """
-    استقبال بيانات الساعة من ADB Monitor
-    التنسيق المتوقع:
-    {
-        "heart_rate": 82,
-        "systolic": 118,
-        "diastolic": 76,
-        "timestamp": "2024-01-01T12:00:00"
-    }
+    استقبال بيانات ESP32 (تم تعديلها من ADB Monitor)
     """
     try:
         data = request.data
-        logger.info(f"📡 ADB Watch data received: {data}")
+        logger.info(f"📡 ESP32 data received: {data}")
         
-        # استخراج البيانات
-        heart_rate = data.get('heart_rate') or data.get('heartRate')
+        # استخراج البيانات من ESP32
+        heart_rate = data.get('bpm') or data.get('heart_rate') or data.get('heartRate')
+        spo2 = data.get('spo2') or data.get('oxygen') or data.get('SpO2')
         systolic = data.get('systolic') or data.get('systolic_pressure')
         diastolic = data.get('diastolic') or data.get('diastolic_pressure')
         timestamp = data.get('timestamp') or data.get('recorded_at') or timezone.now()
         
-        # التحقق من صحة البيانات
-        if not heart_rate and not systolic:
-            return Response({
-                'success': False,
-                'error': 'لا توجد بيانات صحية في الطلب'
-            }, status=400)
-        
-        # حفظ البيانات
+        # حفظ البيانات في HealthStatus
         health_data = HealthStatus.objects.create(
             user=request.user,
             heart_rate=heart_rate,
+            spo2=spo2,
             systolic_pressure=systolic,
             diastolic_pressure=diastolic,
             recorded_at=timestamp
         )
         
-        logger.info(f"✅ ADB data saved: ID={health_data.id}, HR={heart_rate}, BP={systolic}/{diastolic}")
-        
-        # إنشاء إشعار للتطبيق إذا كانت القراءات غير طبيعية
-        if heart_rate and (heart_rate > 100 or heart_rate < 60):
-            Notification.objects.create(
-                user=request.user,
-                type='health_alert',
-                priority='high',
-                icon='❤️',
-                title='تنبيه صحي',
-                message=f'ضربات القلب: {heart_rate} BPM',
-                suggestions=['استرح قليلاً', 'خذ نفساً عميقاً', 'اشرب ماء']
-            )
+        logger.info(f"✅ ESP32 data saved: ID={health_data.id}, HR={heart_rate}, SpO2={spo2}")
         
         return Response({
             'success': True,
-            'message': 'تم استلام بيانات الساعة بنجاح',
+            'message': 'تم استلام بيانات ESP32 بنجاح',
             'data': {
                 'id': health_data.id,
                 'heart_rate': health_data.heart_rate,
-                'blood_pressure': f"{health_data.systolic_pressure}/{health_data.diastolic_pressure}" if health_data.systolic_pressure else None,
+                'spo2': health_data.spo2,
                 'recorded_at': health_data.recorded_at.isoformat()
             }
         })
         
     except Exception as e:
-        logger.error(f"❌ ADB data error: {e}")
-        return Response({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        logger.error(f"❌ ESP32 data error: {e}")
+        return Response({'success': False, 'error': str(e)}, status=500)

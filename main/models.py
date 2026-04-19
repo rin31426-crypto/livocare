@@ -154,6 +154,7 @@ class HealthStatus(models.Model):
     
     systolic_pressure = models.IntegerField(null=True, blank=True, verbose_name="الضغط الانقباضي")
     diastolic_pressure = models.IntegerField(null=True, blank=True, verbose_name="الضغط الانبساطي")
+    spo2 = models.IntegerField(null=True, blank=True, verbose_name="نسبة الأكسجين في الدم (SpO2%)")
     blood_glucose = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="سكر الدم")
     
     class Meta:
