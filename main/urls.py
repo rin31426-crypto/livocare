@@ -114,6 +114,7 @@ base_urls = [
     path('notifications/mark-all-read/', mark_all_notifications_read, name='mark-all-notifications-read'),
     path('notifications/<int:notification_id>/delete/', delete_notification, name='delete-notification'),
     path('notifications/delete-all-read/', delete_all_read_notifications, name='delete-all-read-notifications'),
+    path('notifications/create/', views.create_notification, name='create-notification'),
 ]
 
 
