@@ -6,7 +6,11 @@ from django.http import JsonResponse
 from main.views import (
     scan_barcode, advanced_cross_insights, google_auth,
     trigger_notifications, generate_notifications_now,
-    push_subscribe
+    push_subscribe,
+    # ✅ أضف هذه الدوال الجديدة
+    manage_profile, change_password, delete_my_account,
+    export_all_data, backup_data, restore_backup,
+    user_settings, manage_goals
 )
 from main import views
 
@@ -27,7 +31,6 @@ router.register(r'conditions', views.ChronicConditionViewSet, basename='conditio
 router.register(r'medical-records', views.MedicalRecordViewSet, basename='medical-records')
 router.register(r'recommendations', views.RecommendationViewSet, basename='recommendations')
 router.register(r'chat-logs', views.ChatLogViewSet, basename='chat-logs')
-# ✅ تسجيل notifications مرة واحدة فقط
 router.register(r'notifications', views.NotificationViewSet, basename='notifications')
 router.register(r'environment-data', views.EnvironmentDataViewSet, basename='environment-data')
 router.register(r'users', views.UserProfileViewSet, basename='users')
@@ -89,6 +92,16 @@ base_urls = [
     # ✅ مسار Push Notifications الأساسي
     path('push-subscribe/', push_subscribe, name='push-subscribe'),
     path('achievements/', views.get_user_achievements, name='achievements'),
+    
+    # ✅ إدارة الحساب (هذه المسارات الجديدة)
+    path('profile/', manage_profile, name='manage_profile'),
+    path('change-password/', change_password, name='change_password'),
+    path('delete-account/', delete_my_account, name='delete_account'),
+    path('export-data/', export_all_data, name='export_data'),
+    path('backup/', backup_data, name='backup_data'),
+    path('restore/', restore_backup, name='restore_backup'),
+    path('settings/', user_settings, name='user_settings'),
+    path('goals/', manage_goals, name='manage_goals'),
 ]
 
 
@@ -96,7 +109,6 @@ base_urls = [
 # ✅ مسارات الإشعارات المخصصة (لأن الـ router لا يولدها تلقائياً)
 # =========================================================
 notification_custom_urls = [
-    # 📊 إحصائيات وعدادات
     path('notifications/unread-count/', 
          views.NotificationViewSet.as_view({'get': 'unread_count'}), 
          name='notification-unread-count'),
@@ -109,7 +121,6 @@ notification_custom_urls = [
          views.NotificationViewSet.as_view({'get': 'recent'}), 
          name='notification-recent'),
     
-    # ✏️ تحديثات جماعية
     path('notifications/mark-all-read/', 
          views.NotificationViewSet.as_view({'post': 'mark_all_read'}), 
          name='notification-mark-all-read'),
@@ -118,17 +129,14 @@ notification_custom_urls = [
          views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), 
          name='notification-delete-all-read'),
     
-    # 🗄️ أرشفة
     path('notifications/archive/', 
          views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), 
          name='notification-archive'),
     
-    # 🔄 توليد إشعارات
     path('notifications/generate-auto/', 
          views.NotificationViewSet.as_view({'post': 'generate_auto'}), 
          name='notification-generate-auto'),
     
-    # 📱 Push Notifications
     path('notifications/save-push-subscription/', 
          views.NotificationViewSet.as_view({'post': 'save_push_subscription'}), 
          name='save-push-subscription'),

@@ -278,7 +278,281 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=400)
+# ==============================================================================
+# 👤 إدارة الحساب الكاملة
+# ==============================================================================
 
+@api_view(['GET', 'PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def manage_profile(request):
+    """إدارة الملف الشخصي - قراءة وتحديث"""
+    user = request.user
+    
+    if request.method == 'GET':
+        return Response({
+            'success': True,
+            'data': {
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'date_of_birth': getattr(user, 'date_of_birth', None),
+                'gender': getattr(user, 'gender', None),
+                'occupation': getattr(user, 'occupation', None),
+                'phone_number': getattr(user, 'phone_number', None),
+                'initial_weight': getattr(user, 'initial_weight', None),
+                'height': getattr(user, 'height', None),
+            }
+        })
+    
+    elif request.method in ['PUT', 'PATCH']:
+        data = request.data
+        # تحديث الحقول المسموح بها
+        allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 
+                         'occupation', 'phone_number', 'initial_weight', 'height']
+        
+        for field in allowed_fields:
+            if field in data:
+                setattr(user, field, data[field])
+        
+        user.save()
+        
+        return Response({
+            'success': True,
+            'message': 'تم تحديث الملف الشخصي بنجاح',
+            'data': {
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            }
+        })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    """تغيير كلمة المرور"""
+    user = request.user
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+    
+    if not current_password or not new_password:
+        return Response({'success': False, 'error': 'جميع الحقول مطلوبة'}, status=400)
+    
+    if len(new_password) < 8:
+        return Response({'success': False, 'error': 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل'}, status=400)
+    
+    if not user.check_password(current_password):
+        return Response({'success': False, 'error': 'كلمة المرور الحالية غير صحيحة'}, status=400)
+    
+    user.set_password(new_password)
+    user.save()
+    
+    return Response({'success': True, 'message': 'تم تغيير كلمة المرور بنجاح'})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_my_account(request):
+    """حذف حساب المستخدم بالكامل"""
+    user = request.user
+    username = user.username
+    
+    # حذف جميع البيانات المرتبطة (Django ستحذف تلقائياً بسبب CASCADE)
+    user.delete()
+    
+    return Response({
+        'success': True,
+        'message': f'تم حذف حساب المستخدم {username} بنجاح'
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_all_data(request):
+    """تصدير جميع بيانات المستخدم"""
+    user = request.user
+    
+    # جمع جميع البيانات
+    data = {
+        'profile': {
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'date_of_birth': getattr(user, 'date_of_birth', None),
+            'gender': getattr(user, 'gender', None),
+            'phone_number': getattr(user, 'phone_number', None),
+        },
+        'health_status': list(HealthStatus.objects.filter(user=user).values()),
+        'activities': list(PhysicalActivity.objects.filter(user=user).values()),
+        'sleep': list(Sleep.objects.filter(user=user).values()),
+        'mood_entries': list(MoodEntry.objects.filter(user=user).values()),
+        'meals': list(Meal.objects.filter(user=user).values()),
+        'habits': list(HabitDefinition.objects.filter(user=user).values()),
+        'habit_logs': list(HabitLog.objects.filter(habit__user=user).values()),
+        'goals': list(HealthGoal.objects.filter(user=user).values()),
+        'notifications': list(Notification.objects.filter(user=user).values()),
+    }
+    
+    return Response({
+        'success': True,
+        'data': data,
+        'export_date': timezone.now().isoformat()
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def backup_data(request):
+    """إنشاء نسخة احتياطية من البيانات"""
+    user = request.user
+    
+    backup = {
+        'user_id': user.id,
+        'username': user.username,
+        'export_date': timezone.now().isoformat(),
+        'data': {
+            'profile': {
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'date_of_birth': getattr(user, 'date_of_birth', None),
+                'gender': getattr(user, 'gender', None),
+                'initial_weight': getattr(user, 'initial_weight', None),
+                'height': getattr(user, 'height', None),
+            },
+            'health_status': list(HealthStatus.objects.filter(user=user).values()),
+            'activities': list(PhysicalActivity.objects.filter(user=user).values()),
+            'sleep': list(Sleep.objects.filter(user=user).values()),
+            'mood_entries': list(MoodEntry.objects.filter(user=user).values()),
+            'meals': list(Meal.objects.filter(user=user).values()),
+            'habits': list(HabitDefinition.objects.filter(user=user).values()),
+            'habit_logs': list(HabitLog.objects.filter(habit__user=user).values()),
+            'goals': list(HealthGoal.objects.filter(user=user).values()),
+        }
+    }
+    
+    return Response({
+        'success': True,
+        'backup': backup,
+        'message': 'تم إنشاء النسخة الاحتياطية بنجاح'
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def restore_backup(request):
+    """استعادة البيانات من نسخة احتياطية"""
+    backup_data = request.data.get('backup')
+    
+    if not backup_data:
+        return Response({'success': False, 'error': 'لا توجد بيانات للاستعادة'}, status=400)
+    
+    user = request.user
+    data = backup_data.get('data', {})
+    
+    # استعادة الملف الشخصي
+    profile = data.get('profile', {})
+    allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 'initial_weight', 'height']
+    for field in allowed_fields:
+        if field in profile:
+            setattr(user, field, profile[field])
+    user.save()
+    
+    # ملاحظة: استعادة السجلات الأخرى تتطلب معالجة أكثر تفصيلاً
+    # لتجنب التكرار والمشاكل، يمكن إما حذف البيانات الحالية أولاً أو تخطيها
+    
+    return Response({
+        'success': True,
+        'message': 'تم استعادة البيانات بنجاح (تم استعادة الملف الشخصي)'
+    })
+
+
+@api_view(['GET', 'POST', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_goals(request):
+    """إدارة الأهداف الصحية"""
+    if request.method == 'GET':
+        goals = HealthGoal.objects.filter(user=request.user)
+        total_goals = goals.count()
+        completed_goals = goals.filter(is_completed=True).count()
+        avg_progress = goals.aggregate(Avg('progress'))['progress__avg'] or 0
+        
+        return Response({
+            'success': True,
+            'data': list(goals.values()),
+            'stats': {
+                'total': total_goals,
+                'completed': completed_goals,
+                'in_progress': total_goals - completed_goals,
+                'avg_progress': round(avg_progress, 1)
+            }
+        })
+    
+    elif request.method == 'POST':
+        serializer = HealthGoalSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response({'success': True, 'data': serializer.data, 'message': 'تم إضافة الهدف بنجاح'})
+        return Response({'success': False, 'errors': serializer.errors}, status=400)
+    
+    elif request.method == 'PUT':
+        goal_id = request.data.get('id')
+        try:
+            goal = HealthGoal.objects.get(id=goal_id, user=request.user)
+            serializer = HealthGoalSerializer(goal, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({'success': True, 'data': serializer.data, 'message': 'تم تحديث الهدف بنجاح'})
+            return Response({'success': False, 'errors': serializer.errors}, status=400)
+        except HealthGoal.DoesNotExist:
+            return Response({'success': False, 'error': 'الهدف غير موجود'}, status=404)
+    
+    elif request.method == 'DELETE':
+        goal_id = request.data.get('id')
+        try:
+            goal = HealthGoal.objects.get(id=goal_id, user=request.user)
+            goal.delete()
+            return Response({'success': True, 'message': 'تم حذف الهدف بنجاح'})
+        except HealthGoal.DoesNotExist:
+            return Response({'success': False, 'error': 'الهدف غير موجود'}, status=404)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def user_settings(request):
+    """إعدادات المستخدم (الوضع الليلي، اللغة، الإشعارات)"""
+    if request.method == 'GET':
+        return Response({
+            'success': True,
+            'data': {
+                'dark_mode': getattr(request.user, 'dark_mode', False),
+                'notifications_enabled': getattr(request.user, 'notifications_enabled', True),
+                'language': getattr(request.user, 'language', 'ar'),
+            }
+        })
+    
+    elif request.method == 'POST':
+        data = request.data
+        if 'dark_mode' in data:
+            request.user.dark_mode = data['dark_mode']
+        if 'notifications_enabled' in data:
+            request.user.notifications_enabled = data['notifications_enabled']
+        if 'language' in data:
+            request.user.language = data['language']
+        request.user.save()
+        
+        return Response({
+            'success': True,
+            'message': 'تم حفظ الإعدادات بنجاح',
+            'data': {
+                'dark_mode': request.user.dark_mode,
+                'notifications_enabled': request.user.notifications_enabled,
+                'language': request.user.language,
+            }
+        })
 
 # ==============================================================================
 # 📊 التقارير والملخصات
