@@ -19,5 +19,4 @@ google-genai==1.65.0
 google-generativeai==0.8.4
 pandas==2.2.3
 scikit-learn==1.6.1
-redis==5.0.1
-django-celery-beat==2.6.0
+django-crontab==0.7.1
