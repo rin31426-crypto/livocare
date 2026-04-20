@@ -943,42 +943,42 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user).order_by('-created_at')
     
- def list(self, request, *args, **kwargs):
-    """جلب جميع الإشعارات"""
-    try:
-        # ✅ جلب الإشعارات مباشرة
-        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
-        
-        print(f"📢 User {request.user.id} has {notifications.count()} notifications")
-        
-        # ✅ تحويل إلى قائمة بسيطة
-        notifications_list = []
-        for notification in notifications:
-            notifications_list.append({
-                'id': notification.id,
-                'title': notification.title,
-                'message': notification.message,
-                'type': notification.type,
-                'priority': notification.priority,
-                'is_read': notification.is_read,
-                'action_url': notification.action_url,
-                'created_at': notification.created_at.isoformat() if notification.created_at else None,
+    def list(self, request, *args, **kwargs):
+        """جلب جميع الإشعارات"""
+        try:
+            # ✅ جلب الإشعارات مباشرة
+            notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+            
+            print(f"📢 User {request.user.id} has {notifications.count()} notifications")
+            
+            # ✅ تحويل إلى قائمة بسيطة
+            notifications_list = []
+            for notification in notifications:
+                notifications_list.append({
+                    'id': notification.id,
+                    'title': notification.title,
+                    'message': notification.message,
+                    'type': notification.type,
+                    'priority': notification.priority,
+                    'is_read': notification.is_read,
+                    'action_url': notification.action_url,
+                    'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                })
+            
+            return Response({
+                'success': True,
+                'count': len(notifications_list),
+                'results': notifications_list
             })
-        
-        return Response({
-            'success': True,
-            'count': len(notifications_list),
-            'results': notifications_list
-        })
-    except Exception as e:
-        print(f"Error in list: {e}")
-        import traceback
-        traceback.print_exc()
-        return Response({
-            'success': True,
-            'count': 0,
-            'results': []
-        })
+        except Exception as e:
+            print(f"Error in list: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'success': True,
+                'count': 0,
+                'results': []
+            })
     
     
     # ✅ إنشاء إشعار جديد
