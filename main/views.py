@@ -936,28 +936,22 @@ def cross_insights(request):
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
-# في main/views.py - استبدل NotificationViewSet بالكامل
-
 class NotificationViewSet(viewsets.ModelViewSet):
-    """ViewSet لإدارة الإشعارات محلياً"""
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
     
     def get_queryset(self):
-        # ✅ تأكد من أن user موجود
-        if not self.request.user.is_authenticated:
-            return Notification.objects.none()
         return Notification.objects.filter(user=self.request.user).order_by('-created_at')
     
-    # ✅ قائمة الإشعارات - إعادة كتابة بسيطة
     def list(self, request, *args, **kwargs):
+        """جلب جميع الإشعارات"""
         try:
-            # ✅ جلب الإشعارات مباشرة بدون استخدام get_queryset
-            notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+            # ✅ استخدام get_queryset مباشرة
+            queryset = self.get_queryset()
             
-            # تحويل إلى JSON
+            # ✅ تحويل إلى قائمة
             notifications_list = []
-            for notification in notifications:
+            for notification in queryset:
                 notifications_list.append({
                     'id': notification.id,
                     'title': notification.title,
@@ -969,7 +963,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
                     'created_at': notification.created_at.isoformat() if notification.created_at else None,
                 })
             
-            print(f"📢 Found {len(notifications_list)} notifications for user {request.user.id}")
+            print(f"📢 User {request.user.id} has {len(notifications_list)} notifications")
             
             return Response({
                 'success': True,
@@ -983,6 +977,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 'count': 0,
                 'results': []
             })
+    
+    # ✅ باقي الدوال تبقى كما هي...
     
     # ✅ إنشاء إشعار جديد
     def create(self, request, *args, **kwargs):
