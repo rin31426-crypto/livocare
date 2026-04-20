@@ -1087,6 +1087,8 @@ def watch_history(request):
 # 🔐 المصادقة
 # ==============================================================================
 
+# في main/views.py - تأكد من أن دالة google_auth بهذا الشكل
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def google_auth(request):
@@ -1094,20 +1096,53 @@ def google_auth(request):
         data = json.loads(request.body)
         email = data.get('email')
         name = data.get('name', '')
+        google_id = data.get('google_id', '')
+        picture = data.get('picture', '')
         
         if not email:
             return JsonResponse({'error': 'Email is required'}, status=400)
         
+        # تقسيم الاسم إلى first_name و last_name
+        name_parts = name.split(' ', 1)
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
+        
+        # ✅ حفظ أو تحديث المستخدم مع جميع الحقول
         user, created = User.objects.get_or_create(
             email=email,
-            defaults={'username': email.split('@')[0], 'first_name': name.split()[0] if name else ''}
+            defaults={
+                'username': email.split('@')[0],
+                'first_name': first_name,
+                'last_name': last_name,
+            }
         )
         
+        # ✅ إذا كان المستخدم موجوداً بالفعل، قم بتحديث الاسم
+        if not created:
+            if not user.first_name:
+                user.first_name = first_name
+            if not user.last_name:
+                user.last_name = last_name
+            user.save()
+        
+        # إنشاء التوكنات
         refresh = RefreshToken.for_user(user)
-        return JsonResponse({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        
+        # ✅ إعادة بيانات إضافية للمستخدم
+        return JsonResponse({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            }
+        })
+        
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
-
 
 # ==============================================================================
 # 📷 مسح الباركود
