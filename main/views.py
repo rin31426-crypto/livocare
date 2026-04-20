@@ -1269,6 +1269,41 @@ def get_notifications_simple(request):
     except Exception as e:
         print(f"❌ Error: {e}")
         return Response({'success': True, 'count': 0, 'results': []})
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_test_notifications(request):
+    """إنشاء إشعارات تجريبية للمستخدم الحالي"""
+    user = request.user
+    created = []
+    
+    notifications_data = [
+        {'title': '🎉 مرحباً في LivoCare', 'message': 'أهلاً بك في التطبيق!', 'type': 'health', 'priority': 'high'},
+        {'title': '💪 هدف اليوم', 'message': 'أنت على بعد 3000 خطوة من هدفك!', 'type': 'activity', 'priority': 'medium'},
+        {'title': '🥗 تذكير بالوجبة', 'message': 'حان وقت الغداء!', 'type': 'nutrition', 'priority': 'medium'},
+        {'title': '😊 كيف تشعر اليوم؟', 'message': 'سجل حالتك المزاجية', 'type': 'mood', 'priority': 'low'},
+        {'title': '🏆 إنجاز', 'message': 'لقد أكملت 7 أيام متتالية!', 'type': 'achievement', 'priority': 'high'},
+    ]
+    
+    for n in notifications_data:
+        notification = Notification.objects.create(
+            user=user,
+            title=n['title'],
+            message=n['message'],
+            type=n['type'],
+            priority=n['priority'],
+            action_url='/dashboard',
+            is_read=False
+        )
+        created.append({'id': notification.id, 'title': notification.title})
+    
+    return Response({
+        'success': True,
+        'user_id': user.id,
+        'username': user.username,
+        'created': created,
+        'total': Notification.objects.filter(user=user).count()
+    })
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
