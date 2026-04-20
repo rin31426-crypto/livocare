@@ -1179,7 +1179,21 @@ def get_user_achievements(request):
     """جلب إنجازات المستخدم"""
     return Response({'success': True, 'data': []})
 
+# في main/views.py، أضف هذه الدالة
 
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def trigger_notifications(request):
+    """نقطة نهاية لاختبار الإشعارات - تعيد نجاح بسيط"""
+    try:
+        # يمكنك إضافة منطق هنا إذا أردت
+        return Response({
+            'success': True,
+            'message': 'تم تشغيل الإشعارات بنجاح',
+            'timestamp': timezone.now().isoformat()
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
