@@ -10,7 +10,11 @@ from main.views import (
     # ✅ أضف هذه الدوال الجديدة
     manage_profile, change_password, delete_my_account,
     export_all_data, backup_data, restore_backup,
-    user_settings, manage_goals
+    user_settings, manage_goals,
+    # ✅ أضف دوال الإشعارات الجديدة
+    create_notification, get_notifications,
+    mark_notification_read, mark_all_notifications_read,
+    delete_notification, delete_all_read_notifications
 )
 from main import views
 
@@ -102,6 +106,14 @@ base_urls = [
     path('restore/', restore_backup, name='restore_backup'),
     path('settings/', user_settings, name='user_settings'),
     path('goals/', manage_goals, name='manage_goals'),
+    
+    # ✅ إشعارات داخل التطبيق (المسارات الجديدة)
+    path('notifications/create/', create_notification, name='create-notification'),
+    path('notifications/get/', get_notifications, name='get-notifications'),
+    path('notifications/<int:notification_id>/mark-read/', mark_notification_read, name='mark-notification-read'),
+    path('notifications/mark-all-read/', mark_all_notifications_read, name='mark-all-notifications-read'),
+    path('notifications/<int:notification_id>/delete/', delete_notification, name='delete-notification'),
+    path('notifications/delete-all-read/', delete_all_read_notifications, name='delete-all-read-notifications'),
 ]
 
 
