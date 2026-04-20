@@ -7,7 +7,7 @@ from datetime import timedelta
 import os
 import dj_database_url
 from dotenv import load_dotenv
-
+from celery.schedules import crontab
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -309,4 +309,35 @@ if not DEBUG:
     WEB_CONCURRENCY = 1
     GUNICORN_TIMEOUT = 120
     CONN_MAX_AGE = 0
+# ==============================================================================
+# ⏰ Celery إعدادات
+# ==============================================================================
 
+CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    'send-daily-summary': {
+        'task': 'main.tasks.send_daily_summary_notifications',
+        'schedule': crontab(hour=20, minute=0),  # 8:00 PM
+    },
+    'send-breakfast-reminder': {
+        'task': 'main.tasks.send_meal_reminder',
+        'schedule': crontab(hour=8, minute=0),  # 8:00 AM
+    },
+    'send-lunch-reminder': {
+        'task': 'main.tasks.send_meal_reminder',
+        'schedule': crontab(hour=13, minute=0),  # 1:00 PM
+    },
+    'send-dinner-reminder': {
+        'task': 'main.tasks.send_meal_reminder',
+        'schedule': crontab(hour=19, minute=0),  # 7:00 PM
+    },
+    'send-sleep-reminder': {
+        'task': 'main.tasks.send_sleep_reminder',
+        'schedule': crontab(hour=21, minute=0),  # 9:00 PM
+    },
+}
