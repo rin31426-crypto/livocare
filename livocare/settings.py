@@ -308,4 +308,19 @@ if not DEBUG:
     WEB_CONCURRENCY = 1
     GUNICORN_TIMEOUT = 120
     CONN_MAX_AGE = 0
+# ==============================================================================
+# ⏰ Cron Jobs (المهام المجدولة)
+# ==============================================================================
 
+INSTALLED_APPS += [
+    'django_crontab',
+]
+
+CRONJOBS = [
+    ('0 20 * * *', 'django.core.management.call_command', ['generate_daily_notifications']),
+]
+
+# إذا كنت تريد أيضاً تذكير بالوجبات
+# ('0 8 * * *', 'django.core.management.call_command', ['send_meal_reminder', 'breakfast']),
+# ('0 13 * * *', 'django.core.management.call_command', ['send_meal_reminder', 'lunch']),
+# ('0 19 * * *', 'django.core.management.call_command', ['send_meal_reminder', 'dinner']),
