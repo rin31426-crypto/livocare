@@ -937,21 +937,6 @@ def cross_insights(request):
 
 
 # ==============================================================================
-# 🔔 الإشعارات (خدمة خارجية)
-# ==============================================================================
-
-# ==============================================================================
-# 🔔 الإشعارات (خدمة خارجية)
-# ==============================================================================
-
-# ✅ غير هذا السطر إلى الرابط الجديد
-NOTIFICATION_SERVICE_URL = getattr(settings, 'NOTIFICATION_SERVICE_URL', 'https://notification-service-6nzm.onrender.com')
-
-# main/views.py - داخل class NotificationViewSet
-
-# main/views.py - الجزء الخاص بالإشعارات
-
-# ==============================================================================
 # 🔔 الإشعارات (محلياً في قاعدة البيانات)
 # ==============================================================================
 
@@ -961,47 +946,116 @@ class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
+        try:
+            return Notification.objects.filter(user=self.request.user).order_by('-created_at')
+        except Exception as e:
+            print(f"Error in get_queryset: {e}")
+            return Notification.objects.none()
     
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-    
-    # ✅ جلب قائمة الإشعارات
-    def list(self, request):
-        queryset = self.get_queryset()
-        limit = request.query_params.get('limit', 50)
-        if limit:
-            queryset = queryset[:int(limit)]
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({
-            'success': True,
-            'results': serializer.data,
-            'count': queryset.count()
-        })
+    # ✅ قائمة الإشعارات
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            limit = request.query_params.get('limit', 50)
+            if limit:
+                try:
+                    queryset = queryset[:int(limit)]
+                except:
+                    pass
+            
+            # تحويل البيانات إلى JSON آمن
+            notifications_list = []
+            for notification in queryset:
+                notifications_list.append({
+                    'id': notification.id,
+                    'title': notification.title,
+                    'message': notification.message,
+                    'type': notification.type,
+                    'priority': notification.priority,
+                    'is_read': notification.is_read,
+                    'action_url': notification.action_url,
+                    'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                })
+            
+            return Response({
+                'success': True,
+                'results': notifications_list,
+                'count': len(notifications_list)
+            })
+        except Exception as e:
+            print(f"Error in list: {e}")
+            return Response({
+                'success': False, 
+                'error': str(e),
+                'results': [],
+                'count': 0
+            }, status=200)  # إرجاع 200 مع مصفوفة فارغة بدلاً من 500
     
     # ✅ جلب إشعار محدد
     def retrieve(self, request, pk=None):
         try:
             notification = Notification.objects.get(id=pk, user=request.user)
-            serializer = self.get_serializer(notification)
-            return Response(serializer.data)
+            return Response({
+                'success': True,
+                'notification': {
+                    'id': notification.id,
+                    'title': notification.title,
+                    'message': notification.message,
+                    'type': notification.type,
+                    'priority': notification.priority,
+                    'is_read': notification.is_read,
+                    'action_url': notification.action_url,
+                    'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                }
+            })
         except Notification.DoesNotExist:
             return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
     
-    # ✅ حذف إشعار واحد
+    # ✅ إنشاء إشعار جديد
+    def create(self, request, *args, **kwargs):
+        try:
+            data = request.data
+            notification = Notification.objects.create(
+                user=request.user,
+                title=data.get('title', 'LivoCare'),
+                message=data.get('message', ''),
+                type=data.get('type', 'info'),
+                priority=data.get('priority', 'medium'),
+                action_url=data.get('action_url', '/notifications'),
+                is_read=False
+            )
+            return Response({
+                'success': True,
+                'notification': {
+                    'id': notification.id,
+                    'title': notification.title,
+                    'message': notification.message,
+                }
+            }, status=201)
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
+    
+    # ✅ حذف إشعار
     def destroy(self, request, pk=None):
         try:
             notification = Notification.objects.get(id=pk, user=request.user)
             notification.delete()
-            return Response({'success': True, 'message': 'تم حذف الإشعار بنجاح'})
+            return Response({'success': True, 'message': 'تم حذف الإشعار'})
         except Notification.DoesNotExist:
             return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
     
     # ✅ عدد الإشعارات غير المقروءة
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).count()
-        return Response({'unread_count': count})
+        try:
+            count = Notification.objects.filter(user=request.user, is_read=False).count()
+            return Response({'unread_count': count})
+        except Exception as e:
+            return Response({'unread_count': 0})
     
     # ✅ تحديث إشعار كمقروء
     @action(detail=True, methods=['post'])
@@ -1010,58 +1064,27 @@ class NotificationViewSet(viewsets.ModelViewSet):
             notification = Notification.objects.get(id=pk, user=request.user)
             notification.is_read = True
             notification.save()
-            return Response({'success': True, 'message': 'تم تحديث الإشعار كمقروء'})
+            return Response({'success': True})
         except Notification.DoesNotExist:
             return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
     
-    # ✅ تحديث جميع الإشعارات كمقروءة
+    # ✅ تحديث الكل كمقروء
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        return Response({'success': True, 'message': f'تم تحديث {count} إشعار كمقروء'})
+        try:
+            count = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+            return Response({'success': True, 'count': count})
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
     
-    # ✅ إحصائيات الإشعارات
-    @action(detail=False, methods=['get'])
-    def stats(self, request):
-        total = Notification.objects.filter(user=request.user).count()
-        unread = Notification.objects.filter(user=request.user, is_read=False).count()
-        read = total - unread
-        
-        # إحصائيات حسب النوع
-        by_type = {}
-        types = Notification.objects.filter(user=request.user).values('type').annotate(count=Count('id'))
-        for item in types:
-            by_type[item['type']] = item['count']
-        
-        return Response({
-            'success': True,
-            'stats': {
-                'total': total,
-                'unread': unread,
-                'read': read,
-                'by_type': by_type
-            }
-        })
-    
-    # ✅ أحدث الإشعارات
-    @action(detail=False, methods=['get'])
-    def recent(self, request):
-        limit = request.query_params.get('limit', 10)
-        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')[:int(limit)]
-        serializer = self.get_serializer(notifications, many=True)
-        return Response({'success': True, 'results': serializer.data})
-    
-    # ✅ حذف جميع الإشعارات المقروءة
+    # ✅ حذف جميع المقروءة
     @action(detail=False, methods=['delete'])
     def delete_read(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=True).delete()[0]
-        return Response({'success': True, 'message': f'تم حذف {count} إشعار مقروء'})
-    
-    # ✅ حذف جميع الإشعارات (للمستخدم)
-    @action(detail=False, methods=['delete'])
-    def delete_all(self, request):
-        count = Notification.objects.filter(user=request.user).delete()[0]
-        return Response({'success': True, 'message': f'تم حذف {count} إشعار'})
+        try:
+            count = Notification.objects.filter(user=request.user, is_read=True).delete()[0]
+            return Response({'success': True, 'count': count})
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
 # ==============================================================================
 # 🔔 إنشاء إشعار جديد
 # ==============================================================================
