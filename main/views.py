@@ -1233,6 +1233,42 @@ def get_my_notifications(request):
         import traceback
         traceback.print_exc()
         return Response({'success': True, 'count': 0, 'results': []}, status=200)
+# في main/views.py - أضف هذه الدالة في نهاية الملف
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notifications_simple(request):
+    """دالة بسيطة لجلب الإشعارات - تتجاوز ViewSet تماماً"""
+    try:
+        user = request.user
+        print(f"🔍 Getting notifications for user: {user.id}")
+        
+        # جلب الإشعارات مباشرة من قاعدة البيانات
+        notifications = Notification.objects.filter(user=user).order_by('-created_at')
+        
+        result = []
+        for n in notifications:
+            result.append({
+                'id': n.id,
+                'title': n.title,
+                'message': n.message,
+                'type': n.type,
+                'priority': n.priority,
+                'is_read': n.is_read,
+                'action_url': n.action_url,
+                'created_at': n.created_at.isoformat() if n.created_at else None,
+            })
+        
+        print(f"📊 Found {len(result)} notifications for user {user.id}")
+        
+        return Response({
+            'success': True,
+            'count': len(result),
+            'results': result
+        })
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return Response({'success': True, 'count': 0, 'results': []})
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
