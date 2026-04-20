@@ -1194,13 +1194,20 @@ def trigger_notifications(request):
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 # في main/views.py - أضف هذه الدالة في أي مكان (مثلاً بعد NotificationViewSet)
+# في main/views.py - استبدل دالة get_my_notifications بهذه النسخة
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_notifications(request):
-    """جلب جميع إشعارات المستخدم - مسار بديل يعمل"""
+    """جلب جميع إشعارات المستخدم"""
     try:
-        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        user_id = request.user.id
+        print(f"🔍 Fetching notifications for user ID: {user_id}")
+        
+        # ✅ جلب الإشعارات مباشرة بدون أي فلتر معقد
+        notifications = Notification.objects.filter(user_id=user_id).order_by('-created_at')
+        
+        print(f"📊 Query returned {notifications.count()} notifications")
         
         result = []
         for n in notifications:
@@ -1215,17 +1222,17 @@ def get_my_notifications(request):
                 'created_at': n.created_at.isoformat() if n.created_at else None,
             })
         
-        print(f"📢 Found {len(result)} notifications for user {request.user.id}")
-        
         return Response({
             'success': True,
             'count': len(result),
             'results': result,
-            'unread': notifications.filter(is_read=False).count()
+            'unread': sum(1 for n in notifications if not n.is_read)
         })
     except Exception as e:
-        print(f"Error: {e}")
-        return Response({'success': True, 'count': 0, 'results': []})
+        print(f"❌ Error in get_my_notifications: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({'success': True, 'count': 0, 'results': []}, status=200)
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
