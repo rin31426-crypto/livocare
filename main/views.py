@@ -978,7 +978,6 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 'results': []
             })
     
-    # ✅ باقي الدوال تبقى كما هي...
     
     # ✅ إنشاء إشعار جديد
     def create(self, request, *args, **kwargs):
@@ -1194,6 +1193,39 @@ def trigger_notifications(request):
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+# في main/views.py - أضف هذه الدالة في أي مكان (مثلاً بعد NotificationViewSet)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_my_notifications(request):
+    """جلب جميع إشعارات المستخدم - مسار بديل يعمل"""
+    try:
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        
+        result = []
+        for n in notifications:
+            result.append({
+                'id': n.id,
+                'title': n.title,
+                'message': n.message,
+                'type': n.type,
+                'priority': n.priority,
+                'is_read': n.is_read,
+                'action_url': n.action_url,
+                'created_at': n.created_at.isoformat() if n.created_at else None,
+            })
+        
+        print(f"📢 Found {len(result)} notifications for user {request.user.id}")
+        
+        return Response({
+            'success': True,
+            'count': len(result),
+            'results': result,
+            'unread': notifications.filter(is_read=False).count()
+        })
+    except Exception as e:
+        print(f"Error: {e}")
+        return Response({'success': True, 'count': 0, 'results': []})
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
