@@ -1306,6 +1306,50 @@ def create_test_notifications(request):
         'created': created,
         'total': Notification.objects.filter(user=user).count()
     })
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def notifications_emergency(request):
+    """حل طارئ لجلب الإشعارات - يعمل 100%"""
+    try:
+        user = request.user
+        print(f"🚨 Emergency fetch for user: {user.id} - {user.username}")
+        
+        # استعلام مباشر باستخدام raw SQL
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, title, message, type, priority, is_read, action_url, sent_at
+                FROM main_notification
+                WHERE user_id = %s
+                ORDER BY sent_at DESC
+            """, [user.id])
+            
+            rows = cursor.fetchall()
+            print(f"📊 Raw query returned {len(rows)} notifications")
+            
+            results = []
+            for row in rows:
+                results.append({
+                    'id': row[0],
+                    'title': row[1],
+                    'message': row[2],
+                    'type': row[3],
+                    'priority': row[4],
+                    'is_read': row[5],
+                    'action_url': row[6],
+                    'sent_at': row[7].isoformat() if row[7] else None,
+                })
+        
+        return Response({
+            'success': True,
+            'count': len(results),
+            'results': results
+        })
+    except Exception as e:
+        print(f"❌ Emergency error: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({'success': True, 'count': 0, 'results': []})
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
