@@ -42,7 +42,8 @@ from .services.habit_analytics_service import HabitAnalyticsService
 from .services.ai_chat_service import LlamaService
 from .services.sentiment_service import SentimentAnalyzer
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 logger = logging.getLogger(__name__)
 User = get_user_model()
 # ==============================================================================
@@ -1630,14 +1631,38 @@ def send_notifications_to_all_users(request):
         'success': True,
         'message': f'تم إرسال الإشعارات إلى {total} مستخدم'
     })
-# ==============================================================================
-# 📅 endpoints عامة لـ Cron Jobs (بدون مصادقة)
+    # ==============================================================================
+# 📅 endpoints عامة لـ Cron Jobs (بدون مصادقة) مع Push Notifications
 # ==============================================================================
 
-@api_view(['POST'])
+def send_push_to_all_users(title, body, url='/'):
+    """إرسال إشعار منبثق لجميع المستخدمين"""
+    try:
+        requests.post(
+            'https://notification-service-6nzm.onrender.com/notify/all',
+            json={'title': title, 'body': body, 'icon': '/logo192.png', 'url': url},
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Push error: {e}")
+
+
+def send_push_to_user(user_id, title, body, url='/'):
+    """إرسال إشعار منبثق لمستخدم محدد"""
+    try:
+        requests.post(
+            f'https://notification-service-6nzm.onrender.com/notify/{user_id}',
+            json={'title': title, 'body': body, 'icon': '/logo192.png', 'url': url},
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Push error for user {user_id}: {e}")
+
+
+@api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_daily_summary(request):
-    """إرسال ملخص اليوم لجميع المستخدمين - لـ cron-job.org"""
+    """إرسال ملخص اليوم لجميع المستخدمين - لـ cron-job.org (مع Push)"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         today = timezone.now().date()
@@ -1655,38 +1680,47 @@ def cron_daily_summary(request):
             sleep = Sleep.objects.filter(user=user, sleep_start__date=today).first()
             sleep_hours = sleep.duration_hours if sleep else 0
             
-            # بناء الرسالة
-            message = f"📊 ملخص يومك:\n"
-            message += f"🚶 نشاط: {total_minutes} دقيقة\n"
-            message += f"🔥 سعرات محروقة: {total_calories_burned}\n"
-            message += f"🍽️ سعرات متناولة: {total_calories_consumed}\n"
+            # رسالة مختصرة للإشعار المنبثق
+            push_message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}"
             if sleep_hours > 0:
-                message += f"😴 نوم: {sleep_hours} ساعات"
+                push_message += f" | 😴 نوم: {sleep_hours} ساعات"
             
+            # رسالة كاملة للإشعار داخل التطبيق
+            full_message = f"📊 ملخص يومك:\n"
+            full_message += f"🚶 نشاط: {total_minutes} دقيقة\n"
+            full_message += f"🔥 سعرات محروقة: {total_calories_burned}\n"
+            full_message += f"🍽️ سعرات متناولة: {total_calories_consumed}\n"
+            if sleep_hours > 0:
+                full_message += f"😴 نوم: {sleep_hours} ساعات"
+            
+            # ✅ حفظ في قاعدة البيانات
             Notification.objects.create(
                 user=user,
                 title="🌙 ملخص يومك",
-                message=message,
+                message=full_message,
                 type="summary",
                 priority="medium",
                 action_url="/dashboard",
                 is_read=False
             )
+            
+            # ✅ إرسال إشعار منبثق
+            send_push_to_user(user.id, "🌙 ملخص يومك", push_message, "/dashboard")
             total += 1
         
         return Response({
             'success': True,
-            'message': f'تم إرسال الملخص إلى {total} مستخدم',
+            'message': f'تم إرسال الملخص إلى {total} مستخدم (مع Push)',
             'timestamp': timezone.now().isoformat()
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
-@api_view(['POST'])
+@api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_morning_tip(request):
-    """إرسال نصيحة صباحية لجميع المستخدمين - لـ cron-job.org"""
+    """إرسال نصيحة صباحية لجميع المستخدمين - لـ cron-job.org (مع Push)"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         tips = [
@@ -1701,6 +1735,7 @@ def cron_morning_tip(request):
         total = 0
         
         for user in users:
+            # ✅ حفظ في قاعدة البيانات
             Notification.objects.create(
                 user=user,
                 title=tip['title'],
@@ -1710,11 +1745,14 @@ def cron_morning_tip(request):
                 action_url="/dashboard",
                 is_read=False
             )
+            
+            # ✅ إرسال إشعار منبثق
+            send_push_to_user(user.id, tip['title'], tip['message'], "/dashboard")
             total += 1
         
         return Response({
             'success': True,
-            'message': f'تم إرسال النصيحة إلى {total} مستخدم',
+            'message': f'تم إرسال النصيحة إلى {total} مستخدم (مع Push)',
             'tip': tip,
             'timestamp': timezone.now().isoformat()
         })
@@ -1722,10 +1760,10 @@ def cron_morning_tip(request):
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
-@api_view(['POST'])
+@api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_smart_notifications(request):
-    """إرسال إشعارات ذكية لجميع المستخدمين - لـ cron-job.org"""
+    """إرسال إشعارات ذكية لجميع المستخدمين - لـ cron-job.org (مع Push)"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         today = timezone.now().date()
@@ -1746,6 +1784,7 @@ def cron_smart_notifications(request):
                     action_url='/nutrition',
                     is_read=False
                 )
+                send_push_to_user(user.id, '🥗 تذكير بالوجبة', 'لم تسجل أي وجبة اليوم!', '/nutrition')
                 created += 1
             
             # تذكير بالنشاط
@@ -1760,6 +1799,7 @@ def cron_smart_notifications(request):
                     action_url='/activities',
                     is_read=False
                 )
+                send_push_to_user(user.id, '🏃 حان وقت الحركة', 'لم تمارس أي نشاط بدني اليوم!', '/activities')
                 created += 1
             
             # تذكير بالمزاج
@@ -1774,6 +1814,7 @@ def cron_smart_notifications(request):
                     action_url='/mood',
                     is_read=False
                 )
+                send_push_to_user(user.id, '😊 كيف تشعر اليوم؟', 'سجل حالتك المزاجية الآن', '/mood')
                 created += 1
             
             if created > 0:
@@ -1781,64 +1822,24 @@ def cron_smart_notifications(request):
         
         return Response({
             'success': True,
-            'message': f'تم إرسال الإشعارات الذكية إلى {total} مستخدم',
+            'message': f'تم إرسال الإشعارات الذكية إلى {total} مستخدم (مع Push)',
             'timestamp': timezone.now().isoformat()
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
-@api_view(['GET', 'POST'])
-@permission_classes([AllowAny])
-def cron_daily_summary(request):
-    """إرسال ملخص اليوم لجميع المستخدمين - لـ cron-job.org"""
-    try:
-        users = CustomUser.objects.filter(is_active=True)
-        today = timezone.now().date()
-        total = 0
-        
-        for user in users:
-            # إحصائيات اليوم
-            activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
-            total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
-            total_calories_burned = activities.aggregate(Sum('calories_burned'))['calories_burned__sum'] or 0
-            
-            meals = Meal.objects.filter(user=user, meal_time__date=today)
-            total_calories_consumed = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
-            
-            # إنشاء الإشعار في قاعدة البيانات
-            Notification.objects.create(
-                user=user,
-                title="🌙 ملخص يومك",
-                message=f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}",
-                type="summary",
-                priority="medium",
-                action_url="/dashboard",
-                is_read=False
-            )
-            
-            # ✅ إرسال إشعار منبثق (Push)
-            try:
-                requests.post(
-                    'https://notification-service-6nzm.onrender.com/notify/1',  # user_id مؤقت
-                    json={
-                        'title': '🌙 ملخص يومك',
-                        'body': f'نشاط: {total_minutes} دقيقة | سعرات: {total_calories_consumed}',
-                        'icon': '/logo192.png',
-                        'url': '/dashboard'
-                    },
-                    timeout=5
-                )
-            except:
-                pass  # تجاهل أخطاء Push
-            
-            total += 1
-        
-        return Response({
-            'success': True,
-            'message': f'تم إرسال الملخص إلى {total} مستخدم',
-            'timestamp': timezone.now().isoformat()
-        })
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def cron_test_simple(request):
+    """Endpoint بسيط لاختبار cron-job.org"""
+    return JsonResponse({
+        'success': True,
+        'message': 'Cron job is working!',
+        'timestamp': timezone.now().isoformat()
+    })
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================

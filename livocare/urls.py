@@ -5,7 +5,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from main.views import RegisterUserView, HealthSummaryView, nutrition_insights
+from main.views import (
+    RegisterUserView, HealthSummaryView, nutrition_insights,
+    cron_daily_summary, cron_morning_tip, cron_smart_notifications,
+    cron_test_simple
+)
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -47,6 +51,13 @@ urlpatterns = [
     # ==========================================================================
     path('api/', include('main.urls')),
     
+    # ==========================================================================
+    # 🤖 مسارات Cron Jobs (بدون مصادقة)
+    # ==========================================================================
+    path('cron/daily-summary/', cron_daily_summary, name='cron-daily-summary'),
+    path('cron/morning-tip/', cron_morning_tip, name='cron-morning-tip'),
+    path('cron/smart-notifications/', cron_smart_notifications, name='cron-smart-notifications'),
+    path('cron/test/', cron_test_simple, name='cron-test'),
 ]
 
 if settings.DEBUG:
