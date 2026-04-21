@@ -1786,6 +1786,59 @@ def cron_smart_notifications(request):
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def cron_daily_summary(request):
+    """إرسال ملخص اليوم لجميع المستخدمين - لـ cron-job.org"""
+    try:
+        users = CustomUser.objects.filter(is_active=True)
+        today = timezone.now().date()
+        total = 0
+        
+        for user in users:
+            # إحصائيات اليوم
+            activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
+            total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+            total_calories_burned = activities.aggregate(Sum('calories_burned'))['calories_burned__sum'] or 0
+            
+            meals = Meal.objects.filter(user=user, meal_time__date=today)
+            total_calories_consumed = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
+            
+            # إنشاء الإشعار في قاعدة البيانات
+            Notification.objects.create(
+                user=user,
+                title="🌙 ملخص يومك",
+                message=f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}",
+                type="summary",
+                priority="medium",
+                action_url="/dashboard",
+                is_read=False
+            )
+            
+            # ✅ إرسال إشعار منبثق (Push)
+            try:
+                requests.post(
+                    'https://notification-service-6nzm.onrender.com/notify/1',  # user_id مؤقت
+                    json={
+                        'title': '🌙 ملخص يومك',
+                        'body': f'نشاط: {total_minutes} دقيقة | سعرات: {total_calories_consumed}',
+                        'icon': '/logo192.png',
+                        'url': '/dashboard'
+                    },
+                    timeout=5
+                )
+            except:
+                pass  # تجاهل أخطاء Push
+            
+            total += 1
+        
+        return Response({
+            'success': True,
+            'message': f'تم إرسال الملخص إلى {total} مستخدم',
+            'timestamp': timezone.now().isoformat()
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
