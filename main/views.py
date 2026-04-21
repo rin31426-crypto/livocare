@@ -1607,6 +1607,29 @@ def send_morning_tip(request):
         'success': True,
         'tip': tip
     })
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def send_notifications_to_all_users(request):
+    """إرسال إشعارات لجميع المستخدمين (للمسؤول)"""
+    users = CustomUser.objects.all()
+    total = 0
+    
+    for user in users:
+        Notification.objects.create(
+            user=user,
+            title="🌙 مساء الخير",
+            message="كيف كان يومك؟ لا تنسى تسجيل نشاطك ومزاجك اليوم",
+            type="reminder",
+            priority="medium",
+            action_url="/dashboard",
+            is_read=False
+        )
+        total += 1
+    
+    return Response({
+        'success': True,
+        'message': f'تم إرسال الإشعارات إلى {total} مستخدم'
+    })
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
