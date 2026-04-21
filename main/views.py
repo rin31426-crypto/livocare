@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 import requests
 import json
 import logging
+import os
 from rest_framework import permissions
 from django.conf import settings
 from django.views.decorators.http import require_http_methods
@@ -278,6 +279,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=400)
+
+
 # ==============================================================================
 # 👤 إدارة الحساب الكاملة
 # ==============================================================================
@@ -307,7 +310,6 @@ def manage_profile(request):
     
     elif request.method in ['PUT', 'PATCH']:
         data = request.data
-        # تحديث الحقول المسموح بها
         allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 
                          'occupation', 'phone_number', 'initial_weight', 'height']
         
@@ -358,8 +360,6 @@ def delete_my_account(request):
     """حذف حساب المستخدم بالكامل"""
     user = request.user
     username = user.username
-    
-    # حذف جميع البيانات المرتبطة (Django ستحذف تلقائياً بسبب CASCADE)
     user.delete()
     
     return Response({
@@ -374,7 +374,6 @@ def export_all_data(request):
     """تصدير جميع بيانات المستخدم"""
     user = request.user
     
-    # جمع جميع البيانات
     data = {
         'profile': {
             'username': user.username,
@@ -453,16 +452,12 @@ def restore_backup(request):
     user = request.user
     data = backup_data.get('data', {})
     
-    # استعادة الملف الشخصي
     profile = data.get('profile', {})
     allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 'initial_weight', 'height']
     for field in allowed_fields:
         if field in profile:
             setattr(user, field, profile[field])
     user.save()
-    
-    # ملاحظة: استعادة السجلات الأخرى تتطلب معالجة أكثر تفصيلاً
-    # لتجنب التكرار والمشاكل، يمكن إما حذف البيانات الحالية أولاً أو تخطيها
     
     return Response({
         'success': True,
@@ -553,6 +548,7 @@ def user_settings(request):
                 'language': request.user.language,
             }
         })
+
 
 # ==============================================================================
 # 📊 التقارير والملخصات
@@ -841,27 +837,22 @@ def smart_insights(request):
     lang = request.GET.get('lang', 'ar')
     is_arabic = lang.startswith('ar')
     
-    # بيانات العادات
     habits = HabitDefinition.objects.filter(user=user)
     habit_logs = HabitLog.objects.filter(habit__user=user, log_date__gte=week_ago.date())
     total_habits = habits.count()
     completed_today = habit_logs.filter(log_date=today.date(), is_completed=True).count()
     completion_rate = round((completed_today / total_habits) * 100) if total_habits > 0 else 0
     
-    # بيانات النوم
     sleep_data = Sleep.objects.filter(user=user, sleep_start__gte=week_ago)
     avg_sleep = sleep_data.aggregate(Avg('duration_hours'))['duration_hours__avg'] or 0
     
-    # بيانات المزاج
     mood_data = MoodEntry.objects.filter(user=user, entry_time__gte=week_ago)
     mood_counts = mood_data.values('mood').annotate(count=Count('mood'))
     dominant_mood = mood_counts.order_by('-count').first()
     
-    # بيانات التغذية
     meal_data = Meal.objects.filter(user=user, meal_time__gte=week_ago)
     avg_calories = meal_data.aggregate(Avg('total_calories'))['total_calories__avg'] or 0
     
-    # توصيات
     recommendations = []
     
     if avg_sleep < 7:
@@ -936,22 +927,21 @@ def cross_insights(request):
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
+# ==============================================================================
+# 🔔 الإشعارات - ViewSet وإدارة الإشعارات
+# ==============================================================================
+
 class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
     
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
+        return Notification.objects.filter(user=self.request.user).order_by('-sent_at')
     
     def list(self, request, *args, **kwargs):
-        """جلب جميع الإشعارات"""
         try:
-            # ✅ جلب الإشعارات مباشرة
-            notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+            notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
             
-            print(f"📢 User {request.user.id} has {notifications.count()} notifications")
-            
-            # ✅ تحويل إلى قائمة بسيطة
             notifications_list = []
             for notification in notifications:
                 notifications_list.append({
@@ -962,7 +952,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
                     'priority': notification.priority,
                     'is_read': notification.is_read,
                     'action_url': notification.action_url,
-                    'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                    'created_at': notification.sent_at.isoformat() if notification.sent_at else None,
                 })
             
             return Response({
@@ -972,21 +962,11 @@ class NotificationViewSet(viewsets.ModelViewSet):
             })
         except Exception as e:
             print(f"Error in list: {e}")
-            import traceback
-            traceback.print_exc()
-            return Response({
-                'success': True,
-                'count': 0,
-                'results': []
-            })
+            return Response({'success': True, 'count': 0, 'results': []})
     
-    
-    # ✅ إنشاء إشعار جديد
     def create(self, request, *args, **kwargs):
         try:
             data = request.data
-            print(f"📝 Creating notification for user {request.user.id}: {data.get('title')}")
-            
             notification = Notification.objects.create(
                 user=request.user,
                 title=data.get('title', 'LivoCare'),
@@ -996,9 +976,6 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 action_url=data.get('action_url', '/notifications'),
                 is_read=False
             )
-            
-            print(f"✅ Notification created with ID: {notification.id}")
-            
             return Response({
                 'success': True,
                 'notification': {
@@ -1008,10 +985,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 }
             }, status=201)
         except Exception as e:
-            print(f"Error in create: {e}")
             return Response({'success': False, 'error': str(e)}, status=500)
     
-    # ✅ باقي الدوال كما هي...
     def retrieve(self, request, pk=None):
         try:
             notification = Notification.objects.get(id=pk, user=request.user)
@@ -1025,7 +1000,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
                     'priority': notification.priority,
                     'is_read': notification.is_read,
                     'action_url': notification.action_url,
-                    'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                    'created_at': notification.sent_at.isoformat() if notification.sent_at else None,
                 }
             })
         except Notification.DoesNotExist:
@@ -1063,14 +1038,15 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def delete_read(self, request):
         count = Notification.objects.filter(user=request.user, is_read=True).delete()[0]
         return Response({'success': True, 'count': count})
+
+
 # ==============================================================================
-# 🔔 إنشاء إشعار جديد
+# 🔔 دوال إضافية للإشعارات
 # ==============================================================================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_notification(request):
-    """حفظ إشعار جديد في قاعدة البيانات"""
     try:
         data = request.data
         notification = Notification.objects.create(
@@ -1090,7 +1066,7 @@ def create_notification(request):
                 'message': notification.message,
                 'type': notification.type,
                 'priority': notification.priority,
-                'created_at': notification.created_at
+                'created_at': notification.sent_at
             }
         })
     except Exception as e:
@@ -1100,9 +1076,8 @@ def create_notification(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_notifications(request):
-    """جلب جميع إشعارات المستخدم من قاعدة البيانات المحلية"""
     try:
-        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
         serializer = NotificationSerializer(notifications, many=True)
         return Response({
             'success': True,
@@ -1117,7 +1092,6 @@ def get_notifications(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_notification_read(request, notification_id):
-    """تحديد إشعار كمقروء"""
     try:
         notification = Notification.objects.get(id=notification_id, user=request.user)
         notification.is_read = True
@@ -1130,7 +1104,6 @@ def mark_notification_read(request, notification_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_all_notifications_read(request):
-    """تحديد جميع الإشعارات كمقروءة"""
     try:
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return Response({'success': True, 'message': 'تم تحديث جميع الإشعارات كمقروءة'})
@@ -1141,7 +1114,6 @@ def mark_all_notifications_read(request):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_notification(request, notification_id):
-    """حذف إشعار محدد"""
     try:
         notification = Notification.objects.get(id=notification_id, user=request.user)
         notification.delete()
@@ -1153,12 +1125,12 @@ def delete_notification(request, notification_id):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_all_read_notifications(request):
-    """حذف جميع الإشعارات المقروءة"""
     try:
         deleted_count = Notification.objects.filter(user=request.user, is_read=True).delete()[0]
         return Response({'success': True, 'message': f'تم حذف {deleted_count} إشعار مقروء'})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1177,17 +1149,13 @@ def push_subscribe(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_achievements(request):
-    """جلب إنجازات المستخدم"""
     return Response({'success': True, 'data': []})
 
-# في main/views.py، أضف هذه الدالة
 
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def trigger_notifications(request):
-    """نقطة نهاية لاختبار الإشعارات - تعيد نجاح بسيط"""
     try:
-        # يمكنك إضافة منطق هنا إذا أردت
         return Response({
             'success': True,
             'message': 'تم تشغيل الإشعارات بنجاح',
@@ -1195,21 +1163,14 @@ def trigger_notifications(request):
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
-# في main/views.py - أضف هذه الدالة في أي مكان (مثلاً بعد NotificationViewSet)
-# في main/views.py - استبدل دالة get_my_notifications بهذه النسخة
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_notifications(request):
-    """جلب جميع إشعارات المستخدم"""
     try:
         user_id = request.user.id
-        print(f"🔍 Fetching notifications for user ID: {user_id}")
-        
-        # ✅ جلب الإشعارات مباشرة بدون أي فلتر معقد
-        notifications = Notification.objects.filter(user_id=user_id).order_by('-created_at')
-        
-        print(f"📊 Query returned {notifications.count()} notifications")
+        notifications = Notification.objects.filter(user_id=user_id).order_by('-sent_at')
         
         result = []
         for n in notifications:
@@ -1221,7 +1182,7 @@ def get_my_notifications(request):
                 'priority': n.priority,
                 'is_read': n.is_read,
                 'action_url': n.action_url,
-                'created_at': n.created_at.isoformat() if n.created_at else None,
+                'created_at': n.sent_at.isoformat() if n.sent_at else None,
             })
         
         return Response({
@@ -1231,22 +1192,15 @@ def get_my_notifications(request):
             'unread': sum(1 for n in notifications if not n.is_read)
         })
     except Exception as e:
-        print(f"❌ Error in get_my_notifications: {e}")
-        import traceback
-        traceback.print_exc()
         return Response({'success': True, 'count': 0, 'results': []}, status=200)
-# في main/views.py - أضف هذه الدالة في نهاية الملف
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_notifications_simple(request):
-    """دالة بسيطة لجلب الإشعارات - تتجاوز ViewSet تماماً"""
     try:
         user = request.user
-        print(f"🔍 Getting notifications for user: {user.id}")
-        
-        # جلب الإشعارات مباشرة من قاعدة البيانات
-        notifications = Notification.objects.filter(user=user).order_by('-created_at')
+        notifications = Notification.objects.filter(user=user).order_by('-sent_at')
         
         result = []
         for n in notifications:
@@ -1258,10 +1212,8 @@ def get_notifications_simple(request):
                 'priority': n.priority,
                 'is_read': n.is_read,
                 'action_url': n.action_url,
-                'created_at': n.created_at.isoformat() if n.created_at else None,
+                'created_at': n.sent_at.isoformat() if n.sent_at else None,
             })
-        
-        print(f"📊 Found {len(result)} notifications for user {user.id}")
         
         return Response({
             'success': True,
@@ -1269,13 +1221,12 @@ def get_notifications_simple(request):
             'results': result
         })
     except Exception as e:
-        print(f"❌ Error: {e}")
         return Response({'success': True, 'count': 0, 'results': []})
-    
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_test_notifications(request):
-    """إنشاء إشعارات تجريبية للمستخدم الحالي"""
     user = request.user
     created = []
     
@@ -1306,15 +1257,13 @@ def create_test_notifications(request):
         'created': created,
         'total': Notification.objects.filter(user=user).count()
     })
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def notifications_emergency(request):
-    """حل طارئ لجلب الإشعارات - يعمل 100%"""
     try:
         user = request.user
-        print(f"🚨 Emergency fetch for user: {user.id} - {user.username}")
-        
-        # استعلام مباشر باستخدام raw SQL
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -1325,8 +1274,6 @@ def notifications_emergency(request):
             """, [user.id])
             
             rows = cursor.fetchall()
-            print(f"📊 Raw query returned {len(rows)} notifications")
-            
             results = []
             for row in rows:
                 results.append({
@@ -1346,10 +1293,75 @@ def notifications_emergency(request):
             'results': results
         })
     except Exception as e:
-        print(f"❌ Emergency error: {e}")
-        import traceback
-        traceback.print_exc()
         return Response({'success': True, 'count': 0, 'results': []})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def notifications_raw(request):
+    try:
+        user_id = request.user.id
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, title, message, type, priority, is_read, action_url, sent_at
+                FROM main_notification 
+                WHERE user_id = %s 
+                ORDER BY sent_at DESC
+            """, [user_id])
+            
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                results.append({
+                    'id': row[0],
+                    'title': row[1],
+                    'message': row[2],
+                    'type': row[3],
+                    'priority': row[4],
+                    'is_read': row[5],
+                    'action_url': row[6],
+                    'sent_at': row[7].isoformat() if row[7] else None,
+                })
+        
+        return Response({
+            'success': True,
+            'count': len(results),
+            'results': results
+        })
+    except Exception as e:
+        return Response({'success': True, 'count': 0, 'results': []})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_push_notification(request):
+    """إرسال إشعار منبثق للمستخدم الحالي"""
+    try:
+        user = request.user
+        title = request.data.get('title', 'LivoCare')
+        message = request.data.get('message', 'لديك إشعار جديد')
+        
+        response = requests.post(
+            'https://notification-service-6nzm.onrender.com/notify/all',
+            json={
+                'title': title,
+                'body': message,
+                'icon': '/logo192.png',
+                'url': '/dashboard'
+            },
+            timeout=10
+        )
+        
+        return Response({
+            'success': True,
+            'message': 'تم إرسال الإشعار',
+            'service_response': response.json() if response.ok else None
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
@@ -1391,8 +1403,6 @@ def watch_history(request):
 # 🔐 المصادقة
 # ==============================================================================
 
-# في main/views.py - تأكد من أن دالة google_auth بهذا الشكل
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def google_auth(request):
@@ -1406,12 +1416,10 @@ def google_auth(request):
         if not email:
             return JsonResponse({'error': 'Email is required'}, status=400)
         
-        # تقسيم الاسم إلى first_name و last_name
         name_parts = name.split(' ', 1)
         first_name = name_parts[0]
         last_name = name_parts[1] if len(name_parts) > 1 else ''
         
-        # ✅ حفظ أو تحديث المستخدم مع جميع الحقول
         user, created = User.objects.get_or_create(
             email=email,
             defaults={
@@ -1421,7 +1429,6 @@ def google_auth(request):
             }
         )
         
-        # ✅ إذا كان المستخدم موجوداً بالفعل، قم بتحديث الاسم
         if not created:
             if not user.first_name:
                 user.first_name = first_name
@@ -1429,10 +1436,8 @@ def google_auth(request):
                 user.last_name = last_name
             user.save()
         
-        # إنشاء التوكنات
         refresh = RefreshToken.for_user(user)
         
-        # ✅ إعادة بيانات إضافية للمستخدم
         return JsonResponse({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
@@ -1447,6 +1452,7 @@ def google_auth(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
 
 # ==============================================================================
 # 📷 مسح الباركود
@@ -1548,24 +1554,21 @@ def generate_notifications_now(request):
         return Response({'success': True, 'message': f'✅ تم إنشاء {count} إشعار جديد', 'count': count})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def adb_watch_data(request):
-    """
-    استقبال بيانات ESP32 (تم تعديلها من ADB Monitor)
-    """
     try:
         data = request.data
         logger.info(f"📡 ESP32 data received: {data}")
         
-        # استخراج البيانات من ESP32
         heart_rate = data.get('bpm') or data.get('heart_rate') or data.get('heartRate')
         spo2 = data.get('spo2') or data.get('oxygen') or data.get('SpO2')
         systolic = data.get('systolic') or data.get('systolic_pressure')
         diastolic = data.get('diastolic') or data.get('diastolic_pressure')
         timestamp = data.get('timestamp') or data.get('recorded_at') or timezone.now()
         
-        # حفظ البيانات في HealthStatus
         health_data = HealthStatus.objects.create(
             user=request.user,
             heart_rate=heart_rate,
