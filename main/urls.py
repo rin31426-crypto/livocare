@@ -121,6 +121,10 @@ base_urls = [
     path('create-test-notifications/', views.create_test_notifications, name='create-test-notifications'),
     path('send-push/', views.send_push_notification, name='send-push'),
     path('sw-notification/', views.save_notification_from_sw, name='sw-notification'),
+    path('smart-notifications/', views.check_and_send_smart_notifications, name='smart-notifications'),
+    path('daily-summary/', views.send_daily_summary_notification, name='daily-summary'),
+    path('morning-tip/', views.send_morning_tip, name='morning-tip'),
+    path('notify-all-users/', views.send_notifications_to_all_users, name='notify-all-users'),
 ]
 
 

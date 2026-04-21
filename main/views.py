@@ -1384,6 +1384,230 @@ def save_notification_from_sw(request):
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 
+# main/views.py - أضف هذه الدوال في نهاية الملف
+
+from datetime import datetime, time
+from django.utils import timezone
+
+# ==============================================================================
+# 🤖 الإشعارات الذكية والمجدولة
+# ==============================================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def check_and_send_smart_notifications(request):
+    """فحص وإرسال إشعارات ذكية بناءً على سلوك المستخدم"""
+    user = request.user
+    today = timezone.now().date()
+    now = timezone.now()
+    created_count = 0
+    
+    # 1. ✅ إشعار الوجبة (إذا لم يسجل وجبة اليوم)
+    meals_today = Meal.objects.filter(user=user, meal_time__date=today).count()
+    if meals_today == 0:
+        Notification.objects.create(
+            user=user,
+            title='🥗 تذكير بالوجبة',
+            message='لم تسجل أي وجبة اليوم! حان وقت تسجيل وجبتك الصحية.',
+            type='nutrition',
+            priority='medium',
+            action_url='/nutrition',
+            is_read=False
+        )
+        created_count += 1
+    
+    # 2. ✅ إشعار النشاط (إذا لم يسجل أي نشاط)
+    activities_today = PhysicalActivity.objects.filter(user=user, start_time__date=today).count()
+    if activities_today == 0:
+        Notification.objects.create(
+            user=user,
+            title='🏃 حان وقت الحركة',
+            message='لم تمارس أي نشاط بدني اليوم! المشي 30 دقيقة يحسن صحتك.',
+            type='activity',
+            priority='medium',
+            action_url='/activities',
+            is_read=False
+        )
+        created_count += 1
+    
+    # 3. ✅ إشعار المزاج (إذا لم يسجل مزاجه)
+    mood_today = MoodEntry.objects.filter(user=user, entry_time__date=today).count()
+    if mood_today == 0:
+        Notification.objects.create(
+            user=user,
+            title='😊 كيف تشعر اليوم؟',
+            message='سجل حالتك المزاجية الآن لتتبع صحتك النفسية.',
+            type='mood',
+            priority='low',
+            action_url='/mood',
+            is_read=False
+        )
+        created_count += 1
+    
+    # 4. ✅ إشعار النوم (إذا كان الوقت متأخراً ولم يسجل نومه)
+    current_hour = now.hour
+    if current_hour >= 22:  # بعد الساعة 10 مساءً
+        sleep_today = Sleep.objects.filter(user=user, sleep_start__date=today).count()
+        if sleep_today == 0:
+            Notification.objects.create(
+                user=user,
+                title='🌙 وقت النوم',
+                message='حان وقت النوم! النوم الكافي يحسن صحتك ونشاطك غداً.',
+                type='sleep',
+                priority='medium',
+                action_url='/sleep',
+                is_read=False
+            )
+            created_count += 1
+    
+    # 5. ✅ إشعار العادات (للعادات غير المكتملة)
+    habits = HabitDefinition.objects.filter(user=user, is_active=True)
+    for habit in habits:
+        log_today = HabitLog.objects.filter(habit=habit, log_date=today).exists()
+        if not log_today:
+            Notification.objects.create(
+                user=user,
+                title=f'💊 {habit.name}',
+                message=f'لم تسجل عادتك "{habit.name}" اليوم.',
+                type='habit',
+                priority='low',
+                action_url='/habits',
+                is_read=False
+            )
+            created_count += 1
+            if created_count >= 5:  # حد أقصى 5 إشعارات عادات
+                break
+    
+    return Response({
+        'success': True,
+        'message': f'تم إنشاء {created_count} إشعار ذكي',
+        'count': created_count
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_daily_summary_notification(request):
+    """إرسال ملخص اليوم (ساعة 8 مساءً)"""
+    user = request.user
+    today = timezone.now().date()
+    
+    # إحصائيات اليوم
+    activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
+    total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+    total_calories_burned = activities.aggregate(Sum('calories_burned'))['calories_burned__sum'] or 0
+    
+    meals = Meal.objects.filter(user=user, meal_time__date=today)
+    total_calories_consumed = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
+    
+    sleep = Sleep.objects.filter(user=user, sleep_start__date=today).first()
+    sleep_hours = sleep.duration_hours if sleep else 0
+    
+    mood = MoodEntry.objects.filter(user=user, entry_time__date=today).first()
+    mood_text = mood.get_mood_display() if mood else "غير مسجل"
+    
+    # بناء الرسالة
+    message = f"📊 **ملخص يومك**\n\n"
+    message += f"🚶 النشاط: {total_minutes} دقيقة ({total_calories_burned} سعرة)\n"
+    message += f"🍽️ السعرات المتناولة: {total_calories_consumed}\n"
+    if sleep_hours > 0:
+        message += f"😴 النوم: {sleep_hours} ساعات\n"
+    message += f"😊 المزاج: {mood_text}\n\n"
+    
+    # نصائح تحفيزية
+    if total_minutes < 30:
+        message += f"⚠️ نشاطك اليومي منخفض! حاول المشي 30 دقيقة غداً."
+    elif total_calories_consumed < 1200:
+        message += f"⚠️ سعراتك الحرارية منخفضة! تناول وجبات متوازنة."
+    elif total_calories_consumed > 2500:
+        message += f"⚠️ سعراتك الحرارية مرتفعة! حاول تقليل الوجبات الدسمة."
+    else:
+        message += f"🎉 أداء ممتاز! حافظ على هذا المستوى."
+    
+    Notification.objects.create(
+        user=user,
+        title="🌙 ملخص يومك",
+        message=message,
+        type="summary",
+        priority="medium",
+        action_url="/dashboard",
+        is_read=False
+    )
+    
+    return Response({
+        'success': True,
+        'message': 'تم إرسال ملخص اليوم',
+        'stats': {
+            'activity_minutes': total_minutes,
+            'calories_burned': total_calories_burned,
+            'calories_consumed': total_calories_consumed,
+            'sleep_hours': sleep_hours,
+            'mood': mood_text
+        }
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_morning_tip(request):
+    """إرسال نصيحة صباحية (ساعة 8 صباحاً)"""
+    user = request.user
+    today = timezone.now().date()
+    
+    # نصائح متنوعة
+    tips = [
+        {'title': '💧 شرب الماء', 'message': 'ابدأ يومك بكوب من الماء الدافئ لتنشيط الجسم.'},
+        {'title': '🍳 فطور صحي', 'message': 'لا تهمل وجبة الإفطار! تناول بروتين وخضروات.'},
+        {'title': '🚶 نشاط صباحي', 'message': 'تمدد أو امشِ 10 دقائق لتنشيط الدورة الدموية.'},
+        {'title': '📝 تخطيط اليوم', 'message': 'خطط لأهدافك اليومية قبل بدء العمل.'},
+        {'title': '😊 امتنان', 'message': 'خذ دقيقة لتفكر في 3 أشياء تشعر بالامتنان لها.'},
+        {'title': '📱 وقت الشاشات', 'message': 'قلل استخدام الهاتف في أول ساعة من يومك.'},
+    ]
+    
+    # اختيار نصيحة عشوائية
+    import random
+    tip = random.choice(tips)
+    
+    Notification.objects.create(
+        user=user,
+        title=tip['title'],
+        message=tip['message'],
+        type="tip",
+        priority="low",
+        action_url="/tips",
+        is_read=False
+    )
+    
+    return Response({
+        'success': True,
+        'tip': tip
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def send_notifications_to_all_users(request):
+    """إرسال إشعارات لجميع المستخدمين (للمسؤول)"""
+    users = CustomUser.objects.all()
+    total = 0
+    
+    for user in users:
+        # إشعار مسائي
+        Notification.objects.create(
+            user=user,
+            title="🌙 مساء الخير",
+            message="كيف كان يومك؟ لا تنسى تسجيل نشاطك ومزاجك اليوم",
+            type="reminder",
+            priority="medium",
+            action_url="/dashboard",
+            is_read=False
+        )
+        total += 1
+    
+    return Response({
+        'success': True,
+        'message': f'تم إرسال الإشعارات إلى {total} مستخدم'
+    })
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
