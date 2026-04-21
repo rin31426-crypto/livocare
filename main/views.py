@@ -53,9 +53,9 @@ User = get_user_model()
 def send_push_notification_to_user(user_id, title, body, url='/'):
     """إرسال إشعار منبثق لمستخدم محدد"""
     try:
-        # إرسال إلى خدمة الإشعارات
+        # ✅ استخدم user_id الفعلي
         response = requests.post(
-            'https://notification-service-6nzm.onrender.com/notify/1',  # ملاحظة: user_id مؤقت
+            f'https://notification-service-6nzm.onrender.com/notify/{user_id}',
             json={
                 'title': title,
                 'body': body,
@@ -65,11 +65,11 @@ def send_push_notification_to_user(user_id, title, body, url='/'):
             timeout=5
         )
         if response.ok:
-            print(f"✅ Push notification sent: {title}")
+            print(f"✅ Push sent to user {user_id}: {title}")
         else:
-            print(f"❌ Push failed: {response.status_code}")
+            print(f"❌ Push failed for user {user_id}: {response.status_code}")
     except Exception as e:
-        print(f"❌ Push error: {e}")
+        print(f"❌ Push error for user {user_id}: {e}")
 # ==============================================================================
 # 🔐 أذونات مخصصة
 # ==============================================================================
