@@ -1360,7 +1360,29 @@ def send_push_notification(request):
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
-
+    
+# في main/views.py - أضف هذه الدالة
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_notification_from_sw(request):
+    """حفظ إشعار من Service Worker"""
+    try:
+        data = request.data
+        notification = Notification.objects.create(
+            user=request.user,
+            title=data.get('title', 'LivoCare'),
+            message=data.get('message', ''),
+            type=data.get('type', 'info'),
+            priority=data.get('priority', 'medium'),
+            action_url=data.get('action_url', '/notifications'),
+            is_read=False
+        )
+        return Response({
+            'success': True,
+            'id': notification.id
+        }, status=201)
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
 
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية

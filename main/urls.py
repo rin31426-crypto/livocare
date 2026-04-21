@@ -120,6 +120,7 @@ base_urls = [
     path('notifications-simple/', views.get_notifications_simple, name='notifications-simple'),
     path('create-test-notifications/', views.create_test_notifications, name='create-test-notifications'),
     path('send-push/', views.send_push_notification, name='send-push'),
+    path('sw-notification/', views.save_notification_from_sw, name='sw-notification'),
 ]
 
 
