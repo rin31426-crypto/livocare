@@ -1631,6 +1631,162 @@ def send_notifications_to_all_users(request):
         'message': f'تم إرسال الإشعارات إلى {total} مستخدم'
     })
 # ==============================================================================
+# 📅 endpoints عامة لـ Cron Jobs (بدون مصادقة)
+# ==============================================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def cron_daily_summary(request):
+    """إرسال ملخص اليوم لجميع المستخدمين - لـ cron-job.org"""
+    try:
+        users = CustomUser.objects.filter(is_active=True)
+        today = timezone.now().date()
+        total = 0
+        
+        for user in users:
+            # إحصائيات اليوم
+            activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
+            total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
+            total_calories_burned = activities.aggregate(Sum('calories_burned'))['calories_burned__sum'] or 0
+            
+            meals = Meal.objects.filter(user=user, meal_time__date=today)
+            total_calories_consumed = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
+            
+            sleep = Sleep.objects.filter(user=user, sleep_start__date=today).first()
+            sleep_hours = sleep.duration_hours if sleep else 0
+            
+            # بناء الرسالة
+            message = f"📊 ملخص يومك:\n"
+            message += f"🚶 نشاط: {total_minutes} دقيقة\n"
+            message += f"🔥 سعرات محروقة: {total_calories_burned}\n"
+            message += f"🍽️ سعرات متناولة: {total_calories_consumed}\n"
+            if sleep_hours > 0:
+                message += f"😴 نوم: {sleep_hours} ساعات"
+            
+            Notification.objects.create(
+                user=user,
+                title="🌙 ملخص يومك",
+                message=message,
+                type="summary",
+                priority="medium",
+                action_url="/dashboard",
+                is_read=False
+            )
+            total += 1
+        
+        return Response({
+            'success': True,
+            'message': f'تم إرسال الملخص إلى {total} مستخدم',
+            'timestamp': timezone.now().isoformat()
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def cron_morning_tip(request):
+    """إرسال نصيحة صباحية لجميع المستخدمين - لـ cron-job.org"""
+    try:
+        users = CustomUser.objects.filter(is_active=True)
+        tips = [
+            {'title': '💧 اشرب ماء', 'message': 'ابدأ يومك بكوب من الماء الدافئ لتنشيط الجسم'},
+            {'title': '🍳 فطور صحي', 'message': 'لا تهمل وجبة الإفطار! تناول بروتين وخضروات'},
+            {'title': '🚶 تمدد', 'message': 'تمدد أو امشِ 10 دقائق لتنشيط الدورة الدموية'},
+            {'title': '📝 خطط', 'message': 'خطط لأهدافك اليومية قبل بدء العمل'},
+            {'title': '😊 امتنان', 'message': 'خذ دقيقة لتفكر في 3 أشياء تشعر بالامتنان لها'},
+        ]
+        import random
+        tip = random.choice(tips)
+        total = 0
+        
+        for user in users:
+            Notification.objects.create(
+                user=user,
+                title=tip['title'],
+                message=tip['message'],
+                type="tip",
+                priority="low",
+                action_url="/dashboard",
+                is_read=False
+            )
+            total += 1
+        
+        return Response({
+            'success': True,
+            'message': f'تم إرسال النصيحة إلى {total} مستخدم',
+            'tip': tip,
+            'timestamp': timezone.now().isoformat()
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def cron_smart_notifications(request):
+    """إرسال إشعارات ذكية لجميع المستخدمين - لـ cron-job.org"""
+    try:
+        users = CustomUser.objects.filter(is_active=True)
+        today = timezone.now().date()
+        total = 0
+        
+        for user in users:
+            created = 0
+            
+            # تذكير بالوجبة
+            meals_today = Meal.objects.filter(user=user, meal_time__date=today).count()
+            if meals_today == 0:
+                Notification.objects.create(
+                    user=user,
+                    title='🥗 تذكير بالوجبة',
+                    message='لم تسجل أي وجبة اليوم! حان وقت تسجيل وجبتك الصحية.',
+                    type='nutrition',
+                    priority='medium',
+                    action_url='/nutrition',
+                    is_read=False
+                )
+                created += 1
+            
+            # تذكير بالنشاط
+            activities_today = PhysicalActivity.objects.filter(user=user, start_time__date=today).count()
+            if activities_today == 0:
+                Notification.objects.create(
+                    user=user,
+                    title='🏃 حان وقت الحركة',
+                    message='لم تمارس أي نشاط بدني اليوم! المشي 30 دقيقة يحسن صحتك.',
+                    type='activity',
+                    priority='medium',
+                    action_url='/activities',
+                    is_read=False
+                )
+                created += 1
+            
+            # تذكير بالمزاج
+            mood_today = MoodEntry.objects.filter(user=user, entry_time__date=today).count()
+            if mood_today == 0:
+                Notification.objects.create(
+                    user=user,
+                    title='😊 كيف تشعر اليوم؟',
+                    message='سجل حالتك المزاجية الآن لتتبع صحتك النفسية.',
+                    type='mood',
+                    priority='low',
+                    action_url='/mood',
+                    is_read=False
+                )
+                created += 1
+            
+            if created > 0:
+                total += 1
+        
+        return Response({
+            'success': True,
+            'message': f'تم إرسال الإشعارات الذكية إلى {total} مستخدم',
+            'timestamp': timezone.now().isoformat()
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+# ==============================================================================
 # ⌚ بيانات الساعة الذكية
 # ==============================================================================
 

@@ -125,6 +125,9 @@ base_urls = [
     path('daily-summary/', views.send_daily_summary_notification, name='daily-summary'),
     path('morning-tip/', views.send_morning_tip, name='morning-tip'),
     path('notify-all-users/', views.send_notifications_to_all_users, name='notify-all-users'),
+    path('cron/daily-summary/', views.cron_daily_summary, name='cron-daily-summary'),
+    path('cron/morning-tip/', views.cron_morning_tip, name='cron-morning-tip'),
+    path('cron/smart-notifications/', views.cron_smart_notifications, name='cron-smart-notifications'),
 ]
 
 
