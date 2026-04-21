@@ -45,7 +45,30 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+# ==============================================================================
+# 📱 إرسال إشعارات منبثقة (Push)
+# ==============================================================================
 
+def send_push_notification_to_user(user_id, title, body, url='/'):
+    """إرسال إشعار منبثق لمستخدم محدد"""
+    try:
+        # إرسال إلى خدمة الإشعارات
+        response = requests.post(
+            'https://notification-service-6nzm.onrender.com/notify/1',  # ملاحظة: user_id مؤقت
+            json={
+                'title': title,
+                'body': body,
+                'icon': '/logo192.png',
+                'url': url
+            },
+            timeout=5
+        )
+        if response.ok:
+            print(f"✅ Push notification sent: {title}")
+        else:
+            print(f"❌ Push failed: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Push error: {e}")
 # ==============================================================================
 # 🔐 أذونات مخصصة
 # ==============================================================================
@@ -1389,10 +1412,6 @@ def save_notification_from_sw(request):
 from datetime import datetime, time
 from django.utils import timezone
 
-# ==============================================================================
-# 🤖 الإشعارات الذكية والمجدولة
-# ==============================================================================
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def check_and_send_smart_notifications(request):
@@ -1415,6 +1434,8 @@ def check_and_send_smart_notifications(request):
             is_read=False
         )
         created_count += 1
+        # ✅ إرسال Push
+        send_push_notification_to_user(user.id, '🥗 تذكير بالوجبة', 'لم تسجل أي وجبة اليوم!', '/nutrition')
     
     # 2. ✅ إشعار النشاط (إذا لم يسجل أي نشاط)
     activities_today = PhysicalActivity.objects.filter(user=user, start_time__date=today).count()
@@ -1429,6 +1450,7 @@ def check_and_send_smart_notifications(request):
             is_read=False
         )
         created_count += 1
+        send_push_notification_to_user(user.id, '🏃 حان وقت الحركة', 'لم تمارس أي نشاط بدني اليوم!', '/activities')
     
     # 3. ✅ إشعار المزاج (إذا لم يسجل مزاجه)
     mood_today = MoodEntry.objects.filter(user=user, entry_time__date=today).count()
@@ -1443,10 +1465,11 @@ def check_and_send_smart_notifications(request):
             is_read=False
         )
         created_count += 1
+        send_push_notification_to_user(user.id, '😊 كيف تشعر اليوم؟', 'سجل حالتك المزاجية الآن', '/mood')
     
     # 4. ✅ إشعار النوم (إذا كان الوقت متأخراً ولم يسجل نومه)
     current_hour = now.hour
-    if current_hour >= 22:  # بعد الساعة 10 مساءً
+    if current_hour >= 22:
         sleep_today = Sleep.objects.filter(user=user, sleep_start__date=today).count()
         if sleep_today == 0:
             Notification.objects.create(
@@ -1459,12 +1482,14 @@ def check_and_send_smart_notifications(request):
                 is_read=False
             )
             created_count += 1
+            send_push_notification_to_user(user.id, '🌙 وقت النوم', 'حان وقت النوم! نم باكراً', '/sleep')
     
     # 5. ✅ إشعار العادات (للعادات غير المكتملة)
     habits = HabitDefinition.objects.filter(user=user, is_active=True)
+    habit_count = 0
     for habit in habits:
         log_today = HabitLog.objects.filter(habit=habit, log_date=today).exists()
-        if not log_today:
+        if not log_today and habit_count < 3:
             Notification.objects.create(
                 user=user,
                 title=f'💊 {habit.name}',
@@ -1475,8 +1500,8 @@ def check_and_send_smart_notifications(request):
                 is_read=False
             )
             created_count += 1
-            if created_count >= 5:  # حد أقصى 5 إشعارات عادات
-                break
+            habit_count += 1
+            send_push_notification_to_user(user.id, f'💊 {habit.name}', f'لم تسجل عادتك "{habit.name}" اليوم', '/habits')
     
     return Response({
         'success': True,
@@ -1488,7 +1513,7 @@ def check_and_send_smart_notifications(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_daily_summary_notification(request):
-    """إرسال ملخص اليوم (ساعة 8 مساءً)"""
+    """إرسال ملخص اليوم (مع Push)"""
     user = request.user
     today = timezone.now().date()
     
@@ -1503,36 +1528,38 @@ def send_daily_summary_notification(request):
     sleep = Sleep.objects.filter(user=user, sleep_start__date=today).first()
     sleep_hours = sleep.duration_hours if sleep else 0
     
-    mood = MoodEntry.objects.filter(user=user, entry_time__date=today).first()
-    mood_text = mood.get_mood_display() if mood else "غير مسجل"
-    
-    # بناء الرسالة
-    message = f"📊 **ملخص يومك**\n\n"
-    message += f"🚶 النشاط: {total_minutes} دقيقة ({total_calories_burned} سعرة)\n"
-    message += f"🍽️ السعرات المتناولة: {total_calories_consumed}\n"
+    # رسالة مختصرة للإشعار المنبثق
+    push_message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}"
     if sleep_hours > 0:
-        message += f"😴 النوم: {sleep_hours} ساعات\n"
-    message += f"😊 المزاج: {mood_text}\n\n"
+        push_message += f" | 😴 نوم: {sleep_hours} ساعات"
+    
+    # رسالة كاملة للإشعار داخل التطبيق
+    full_message = f"📊 **ملخص يومك**\n\n"
+    full_message += f"🚶 النشاط: {total_minutes} دقيقة ({total_calories_burned} سعرة)\n"
+    full_message += f"🍽️ السعرات المتناولة: {total_calories_consumed}\n"
+    if sleep_hours > 0:
+        full_message += f"😴 النوم: {sleep_hours} ساعات\n"
     
     # نصائح تحفيزية
     if total_minutes < 30:
-        message += f"⚠️ نشاطك اليومي منخفض! حاول المشي 30 دقيقة غداً."
+        full_message += f"\n⚠️ نشاطك اليومي منخفض! حاول المشي 30 دقيقة غداً."
     elif total_calories_consumed < 1200:
-        message += f"⚠️ سعراتك الحرارية منخفضة! تناول وجبات متوازنة."
-    elif total_calories_consumed > 2500:
-        message += f"⚠️ سعراتك الحرارية مرتفعة! حاول تقليل الوجبات الدسمة."
+        full_message += f"\n⚠️ سعراتك الحرارية منخفضة! تناول وجبات متوازنة."
     else:
-        message += f"🎉 أداء ممتاز! حافظ على هذا المستوى."
+        full_message += f"\n🎉 أداء ممتاز! حافظ على هذا المستوى."
     
     Notification.objects.create(
         user=user,
         title="🌙 ملخص يومك",
-        message=message,
+        message=full_message,
         type="summary",
         priority="medium",
         action_url="/dashboard",
         is_read=False
     )
+    
+    # ✅ إرسال Push
+    send_push_notification_to_user(user.id, "🌙 ملخص يومك", push_message, "/dashboard")
     
     return Response({
         'success': True,
@@ -1541,8 +1568,7 @@ def send_daily_summary_notification(request):
             'activity_minutes': total_minutes,
             'calories_burned': total_calories_burned,
             'calories_consumed': total_calories_consumed,
-            'sleep_hours': sleep_hours,
-            'mood': mood_text
+            'sleep_hours': sleep_hours
         }
     })
 
@@ -1550,21 +1576,17 @@ def send_daily_summary_notification(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_morning_tip(request):
-    """إرسال نصيحة صباحية (ساعة 8 صباحاً)"""
+    """إرسال نصيحة صباحية (مع Push)"""
     user = request.user
-    today = timezone.now().date()
     
-    # نصائح متنوعة
     tips = [
         {'title': '💧 شرب الماء', 'message': 'ابدأ يومك بكوب من الماء الدافئ لتنشيط الجسم.'},
         {'title': '🍳 فطور صحي', 'message': 'لا تهمل وجبة الإفطار! تناول بروتين وخضروات.'},
         {'title': '🚶 نشاط صباحي', 'message': 'تمدد أو امشِ 10 دقائق لتنشيط الدورة الدموية.'},
         {'title': '📝 تخطيط اليوم', 'message': 'خطط لأهدافك اليومية قبل بدء العمل.'},
         {'title': '😊 امتنان', 'message': 'خذ دقيقة لتفكر في 3 أشياء تشعر بالامتنان لها.'},
-        {'title': '📱 وقت الشاشات', 'message': 'قلل استخدام الهاتف في أول ساعة من يومك.'},
     ]
     
-    # اختيار نصيحة عشوائية
     import random
     tip = random.choice(tips)
     
@@ -1578,35 +1600,12 @@ def send_morning_tip(request):
         is_read=False
     )
     
+    # ✅ إرسال Push
+    send_push_notification_to_user(user.id, tip['title'], tip['message'], "/tips")
+    
     return Response({
         'success': True,
         'tip': tip
-    })
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def send_notifications_to_all_users(request):
-    """إرسال إشعارات لجميع المستخدمين (للمسؤول)"""
-    users = CustomUser.objects.all()
-    total = 0
-    
-    for user in users:
-        # إشعار مسائي
-        Notification.objects.create(
-            user=user,
-            title="🌙 مساء الخير",
-            message="كيف كان يومك؟ لا تنسى تسجيل نشاطك ومزاجك اليوم",
-            type="reminder",
-            priority="medium",
-            action_url="/dashboard",
-            is_read=False
-        )
-        total += 1
-    
-    return Response({
-        'success': True,
-        'message': f'تم إرسال الإشعارات إلى {total} مستخدم'
     })
 # ==============================================================================
 # ⌚ بيانات الساعة الذكية
