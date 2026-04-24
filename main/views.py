@@ -1525,3 +1525,31 @@ def google_auth(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+# أضف هذا في نهاية main/views.py
+
+class RegisterUserView(generics.CreateAPIView):
+    """تسجيل مستخدم جديد"""
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [AllowAny]
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        # توليد توكنات JWT للمستخدم الجديد
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'success': True,
+            'message': 'تم إنشاء الحساب بنجاح',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+            },
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
