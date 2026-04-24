@@ -7,15 +7,21 @@ from main.views import (
     scan_barcode, advanced_cross_insights, google_auth,
     trigger_notifications, generate_notifications_now,
     push_subscribe,
-    # ✅ أضف هذه الدوال الجديدة
+    # ✅ إدارة الحساب
     manage_profile, change_password, delete_my_account,
     export_all_data, backup_data, restore_backup,
     user_settings, manage_goals,
-    # ✅ أضف دوال الإشعارات الجديدة
+    # ✅ الإشعارات
     create_notification, get_notifications,
     mark_notification_read, mark_all_notifications_read,
     delete_notification, delete_all_read_notifications,
-    get_my_notifications
+    get_my_notifications,
+    # ✅ دوال إضافية
+    save_notification_from_sw, send_push_notification,
+    check_and_send_smart_notifications, send_daily_summary_notification,
+    send_morning_tip, send_notifications_to_all_users,
+    cron_daily_summary, cron_morning_tip, cron_smart_notifications,
+    cron_test_simple
 )
 from main import views
 
@@ -42,44 +48,42 @@ router.register(r'users', views.UserProfileViewSet, basename='users')
 
 
 # =========================================================
-# ✅ المسارات الأساسية
+# ✅ المسارات الأساسية - مع دعم اللغة
 # =========================================================
 base_urls = [
-    # ✅ مسار تجديد التوكن
+    # 🔐 المصادقة
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/google/', google_auth, name='google_auth'),
     
-    # ✅ مسار التحليلات المتقدمة
+    # 🧠 التحليلات الذكية
     path('advanced-insights/', advanced_cross_insights, name='advanced-insights'),
+    path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
+    path('cross-insights/', views.cross_insights, name='cross-insights'),
+    path('analytics/cross-insights/', views.cross_insights, name='cross-insights-alt'),
     
-    # 🌤️ الطقس
+    # 🌤️ الطقس (مع دعم اللغة)
     path('weather/', views.get_weather, name='weather'),
     
     # 🥗 التغذية والبحث عن الطعام
     path('food/search/', views.search_food, name='food-search'),
     
-    # 💪 التمارين الرياضية
+    # 💪 التمارين الرياضية (مع دعم اللغة)
     path('exercises/suggest/', views.suggest_exercises, name='exercise-suggest'),
     
-    # 😊 تحليل المشاعر
+    # 😊 تحليل المشاعر (مع دعم اللغة)
     path('sentiment/analyze/', views.analyze_sentiment, name='sentiment-analyze'),
     
-    # 💡 التوصيات الذكية
+    # 💡 التوصيات الذكية (مع دعم اللغة)
     path('smart-recommendations/', views.get_smart_recommendations, name='smart-recommendations'),
-    
-    # 🧠 تحليلات ذكية متكاملة
-    path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
-    path('cross-insights/', views.cross_insights, name='cross-insights'),
     
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
+    path('health-summary/', views.HealthSummaryView.as_view(), name='health-summary'),
     
-    # ✅ مسار الاختبار
-    path('test-simple/', lambda request: JsonResponse({'status': 'ok', 'message': 'Test endpoint works!'})),
-    
-    # ✅ ماسح الباركود
+    # 📷 ماسح الباركود
     path('scan-barcode/', scan_barcode, name='scan-barcode'),
     
-    # ⌚ بيانات الساعة الذكية
+    # ⌚ بيانات الساعة الذكية (مع دعم اللغة)
     path('watch/health-data/', views.watch_health_data, name='watch_health_data'),
     path('watch/history/', views.watch_history, name='watch_history'),
     path('watch/adb-data/', views.adb_watch_data, name='adb_watch_data'),
@@ -91,14 +95,12 @@ base_urls = [
     path('medications/user/add/', views.add_user_medication, name='add-user-medication'),
     path('medications/user/<int:user_med_id>/delete/', views.delete_user_medication, name='delete-user-medication'),
     
-    # ✅ Google Auth
-    path('auth/google/', google_auth, name='google_auth'),
-    
-    # ✅ مسار Push Notifications الأساسي
+    # 📱 Push Notifications
     path('push-subscribe/', push_subscribe, name='push-subscribe'),
+    path('send-push/', send_push_notification, name='send-push'),
     path('achievements/', views.get_user_achievements, name='achievements'),
     
-    # ✅ إدارة الحساب (هذه المسارات الجديدة)
+    # 👤 إدارة الحساب (مع دعم اللغة)
     path('profile/', manage_profile, name='manage_profile'),
     path('change-password/', change_password, name='change_password'),
     path('delete-account/', delete_my_account, name='delete_account'),
@@ -108,26 +110,38 @@ base_urls = [
     path('settings/', user_settings, name='user_settings'),
     path('goals/', manage_goals, name='manage_goals'),
     
-    # ✅ إشعارات داخل التطبيق (المسارات الجديدة)
+    # 🔔 إشعارات داخل التطبيق
     path('notifications/create/', create_notification, name='create-notification'),
     path('notifications/get/', get_notifications, name='get-notifications'),
     path('notifications/<int:notification_id>/mark-read/', mark_notification_read, name='mark-notification-read'),
     path('notifications/mark-all-read/', mark_all_notifications_read, name='mark-all-notifications-read'),
     path('notifications/<int:notification_id>/delete/', delete_notification, name='delete-notification'),
     path('notifications/delete-all-read/', delete_all_read_notifications, name='delete-all-read-notifications'),
-    path('notifications/create/', views.create_notification, name='create-notification'),
     path('my-notifications/', get_my_notifications, name='my-notifications'),
     path('notifications-simple/', views.get_notifications_simple, name='notifications-simple'),
     path('create-test-notifications/', views.create_test_notifications, name='create-test-notifications'),
-    path('send-push/', views.send_push_notification, name='send-push'),
-    path('sw-notification/', views.save_notification_from_sw, name='sw-notification'),
-    path('smart-notifications/', views.check_and_send_smart_notifications, name='smart-notifications'),
-    path('daily-summary/', views.send_daily_summary_notification, name='daily-summary'),
-    path('morning-tip/', views.send_morning_tip, name='morning-tip'),
-    path('notify-all-users/', views.send_notifications_to_all_users, name='notify-all-users'),
-    path('cron/daily-summary/', views.cron_daily_summary, name='cron-daily-summary'),
-    path('cron/morning-tip/', views.cron_morning_tip, name='cron-morning-tip'),
-    path('cron/smart-notifications/', views.cron_smart_notifications, name='cron-smart-notifications'),
+    path('sw-notification/', save_notification_from_sw, name='sw-notification'),
+    
+    # 🤖 إشعارات ذكية
+    path('smart-notifications/', check_and_send_smart_notifications, name='smart-notifications'),
+    path('daily-summary/', send_daily_summary_notification, name='daily-summary'),
+    path('morning-tip/', send_morning_tip, name='morning-tip'),
+    path('notify-all-users/', send_notifications_to_all_users, name='notify-all-users'),
+    path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
+    
+    # 📅 مسارات Cron Jobs (مع دعم اللغة)
+    path('cron/daily-summary/', cron_daily_summary, name='cron-daily-summary'),
+    path('cron/morning-tip/', cron_morning_tip, name='cron-morning-tip'),
+    path('cron/smart-notifications/', cron_smart_notifications, name='cron-smart-notifications'),
+    path('cron/test/', cron_test_simple, name='cron-test'),
+    path('trigger-notifications/', trigger_notifications, name='trigger-notifications'),
+    
+    # 🧪 اختبارات
+    path('test-simple/', lambda request: JsonResponse({
+        'status': 'ok', 
+        'message': 'Test endpoint works!'
+    }), name='test-simple'),
+    path('test-websocket/', views.test_websocket, name='test-websocket'),
 ]
 
 
@@ -170,15 +184,14 @@ notification_custom_urls = [
     path('notifications/send-push/', 
          views.NotificationViewSet.as_view({'post': 'send_push'}), 
          name='send-push'),
-]
-
-
-# =========================================================
-# ✅ مسارات الإشعارات المجدولة (Cron)
-# =========================================================
-cron_urls = [
-    path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
-    path('trigger-notifications/', trigger_notifications, name='trigger-notifications'),
+    
+    path('notifications/by_type/<str:type>/', 
+         views.NotificationViewSet.as_view({'get': 'by_type'}), 
+         name='notification-by-type'),
+    
+    path('notifications/mark-bulk-read/', 
+         views.NotificationViewSet.as_view({'post': 'mark_bulk_read'}), 
+         name='notification-mark-bulk-read'),
 ]
 
 
@@ -192,9 +205,40 @@ urlpatterns = [
     # ✅ مسارات الإشعارات المخصصة
     *notification_custom_urls,
     
-    # ✅ مسارات الإشعارات المجدولة
-    *cron_urls,
-    
     # ✅ المسارات الأساسية
     *base_urls,
 ]
+
+# =========================================================
+# ✅ إضافة مسار لصفحة 404 مترجمة (اختياري)
+# =========================================================
+def handler404(request, exception):
+    from django.http import JsonResponse
+    from main.views import get_request_language
+    
+    is_arabic = get_request_language(request) == 'ar'
+    message = 'الصفحة غير موجودة' if is_arabic else 'Page not found'
+    
+    return JsonResponse({
+        'success': False,
+        'error': message,
+        'language': 'ar' if is_arabic else 'en'
+    }, status=404)
+
+# ✅ إضافة مسار لصفحة 500 مترجمة (اختياري)
+def handler500(request):
+    from django.http import JsonResponse
+    from main.views import get_request_language
+    
+    is_arabic = get_request_language(request) == 'ar'
+    message = 'خطأ في الخادم الداخلي' if is_arabic else 'Internal server error'
+    
+    return JsonResponse({
+        'success': False,
+        'error': message,
+        'language': 'ar' if is_arabic else 'en'
+    }, status=500)
+
+# يمكن إضافة هذه الأسطر في settings.py
+# handler404 = 'main.urls.handler404'
+# handler500 = 'main.urls.handler500'

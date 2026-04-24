@@ -49,7 +49,455 @@ User = get_user_model()
 # ==============================================================================
 # 📱 إرسال إشعارات منبثقة (Push)
 # ==============================================================================
+# main/views.py
+# أضف هذه الدوال المساعدة في بداية الملف
+# ==============================================================================
+# 🔧 تحسينات إضافية لنظام اللغة
+# ==============================================================================
 
+# أضف هذه الدالة الإضافية في بداية الملف
+# ==============================================================================
+# 🔧 تحسينات إضافية - يمكن إضافتها
+# ==============================================================================
+
+# 1. دالة لتوحيد تنسيق الردود مع اللغة
+def api_response(success, data=None, message_key=None, is_arabic=None, request=None, **kwargs):
+    """توحيد تنسيق الردود مع دعم اللغة"""
+    if is_arabic is None and request:
+        is_arabic = get_request_language(request) == 'ar'
+    elif is_arabic is None:
+        is_arabic = True
+    
+    response = {
+        'success': success,
+        'language': 'ar' if is_arabic else 'en',
+        'timestamp': timezone.now().isoformat()
+    }
+    
+    if data is not None:
+        response['data'] = data
+    
+    if message_key:
+        response['message'] = get_translated_response(message_key, is_arabic, **kwargs)
+    
+    return Response(response, status=kwargs.get('status', 200))
+
+
+# 2. إضافة دعم اللغة في HabitLogViewSet
+class HabitLogViewSet(viewsets.ModelViewSet):
+    # ... الكود الموجود ...
+    
+    @action(detail=False, methods=['get'])
+    def today(self, request):
+        is_arabic = get_request_language(request) == 'ar'
+        today = timezone.now().date()
+        logs = HabitLog.objects.filter(habit__user=request.user, log_date=today).select_related('habit')
+        all_habits = HabitDefinition.objects.filter(user=request.user, is_active=True)
+        
+        result = []
+        log_habit_ids = logs.values_list('habit_id', flat=True)
+        
+        for log in logs:
+            result.append({
+                'id': log.id,
+                'habit': {
+                    'id': log.habit.id, 
+                    'name': log.habit.name, 
+                    'description': log.habit.description
+                },
+                'is_completed': log.is_completed,
+                'actual_value': log.actual_value,
+                'notes': log.notes,
+                'log_date': log.log_date,
+            })
+        
+        for habit in all_habits:
+            if habit.id not in log_habit_ids:
+                result.append({
+                    'id': None,
+                    'habit': {
+                        'id': habit.id, 
+                        'name': habit.name, 
+                        'description': habit.description
+                    },
+                    'is_completed': False,
+                    'actual_value': None,
+                    'notes': None,
+                    'log_date': today,
+                })
+        
+        return Response({
+            'success': True,
+            'data': result,
+            'language': 'ar' if is_arabic else 'en',
+            'message': get_translated_response('habits_loaded', is_arabic) or 
+                      ('تم تحميل العادات بنجاح' if is_arabic else 'Habits loaded successfully')
+        })
+
+
+# 3. إضافة دعم اللغة في HealthSummaryView
+class HealthSummaryView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        is_arabic = get_request_language(request) == 'ar'
+        today = date.today()
+        
+        # ترجمة المزاج
+        mood_translation = {
+            'Excellent': 'ممتاز' if is_arabic else 'Excellent',
+            'Good': 'جيد' if is_arabic else 'Good',
+            'Neutral': 'محايد' if is_arabic else 'Neutral',
+            'Stressed': 'مرهق' if is_arabic else 'Stressed',
+            'Anxious': 'قلق' if is_arabic else 'Anxious',
+            'Sad': 'حزين' if is_arabic else 'Sad',
+            'N/A': 'غير متوفر' if is_arabic else 'N/A'
+        }
+        
+        last_mood_entry = MoodEntry.objects.filter(user=user, entry_time__date=today).order_by('-entry_time').first()
+        current_mood = last_mood_entry.mood if last_mood_entry else "N/A"
+        
+        activity_summary = PhysicalActivity.objects.filter(
+            user=user, start_time__date=today
+        ).aggregate(total_calories_burned=Sum('calories_burned'), total_duration_minutes=Sum('duration_minutes'))
+        
+        sleep_summary = Sleep.objects.filter(
+            user=user, sleep_end__date=today
+        ).aggregate(average_sleep_quality=Avg('quality_rating'))
+        
+        meal_summary = Meal.objects.filter(
+            user=user, meal_time__date=today
+        ).aggregate(total_calories_consumed=Sum('total_calories'))
+        
+        last_health_status = HealthStatus.objects.filter(user=user).order_by('-recorded_at').first()
+        
+        return Response({
+            "success": True,
+            "date": today.isoformat(),
+            "language": 'ar' if is_arabic else 'en',
+            "activities": {
+                "total_calories_burned": activity_summary.get('total_calories_burned') or 0,
+                "total_duration_minutes": activity_summary.get('total_duration_minutes') or 0,
+                "unit_calories": "سعرة" if is_arabic else "cal",
+                "unit_minutes": "دقيقة" if is_arabic else "min"
+            },
+            "sleep": {
+                "average_sleep_quality": round(sleep_summary.get('average_sleep_quality') or 0, 1),
+                "unit_quality": "من 5" if is_arabic else "/5"
+            },
+            "nutrition": {
+                "total_calories_consumed": meal_summary.get('total_calories_consumed') or 0,
+                "unit": "سعرة" if is_arabic else "cal"
+            },
+            "mood": {
+                "last_recorded_mood": mood_translation.get(current_mood, current_mood)
+            },
+            "biometrics": {
+                "last_weight_kg": last_health_status.weight_kg if last_health_status else "N/A",
+                "last_blood_pressure": f"{last_health_status.systolic_pressure}/{last_health_status.diastolic_pressure}" if last_health_status else "N/A",
+                "unit_weight": "كجم" if is_arabic else "kg"
+            }
+        })
+def get_user_preferred_language(user, request=None):
+    """
+    الحصول على اللغة المفضلة للمستخدم من:
+    1. الطلب (request)
+    2. ملف تعريف المستخدم
+    3. الإعدادات العامة
+    """
+    # 1. من الطلب
+    if request:
+        lang = get_request_language(request)
+        if lang in ['ar', 'en']:
+            return lang
+    
+    # 2. من ملف تعريف المستخدم
+    try:
+        if hasattr(user, 'profile') and user.profile.language:
+            return user.profile.language
+    except:
+        pass
+    
+    # 3. من إعدادات المستخدم
+    if hasattr(user, 'language') and user.language:
+        return user.language
+    
+    # 4. افتراضياً العربية
+    return 'ar'
+
+
+# أضف هذه الدوال للـ ChatLog ViewSet
+
+class ChatLogViewSet(BaseUserViewSet):
+    queryset = ChatLog.objects.all()
+    serializer_class = ChatLogSerializer
+    
+    @action(detail=False, methods=['post'])
+    def send_message(self, request):
+        message = request.data.get('message', '')
+        if not message:
+            error_msg = get_translated_response('message_required', is_arabic) or ('الرسالة مطلوبة' if is_arabic else 'Message is required')
+            return Response({'error': error_msg}, status=400)
+        
+        is_arabic = get_request_language(request) == 'ar'
+        
+        user_message = ChatLog.objects.create(
+            user=request.user, 
+            sender='User', 
+            message_text=message, 
+            sentiment_score=0.0
+        )
+        
+        recent_messages = ChatLog.objects.filter(user=request.user).order_by('timestamp')[:20]
+        chat_history = [{'sender': msg.sender, 'message': msg.message_text} for msg in recent_messages]
+        
+        try:
+            llama_service = LlamaService()
+            bot_response = llama_service.get_chat_response(
+                message, 
+                request.user, 
+                chat_history,
+                request=request  # ✅ تمرير الطلب للخدمة
+            )
+        except Exception as e:
+            bot_response = get_translated_response('chat_error', is_arabic) or (
+                f"عذراً {request.user.username}، حدث خطأ غير متوقع." if is_arabic 
+                else f"Sorry {request.user.username}, an unexpected error occurred."
+            )
+        
+        bot_message = ChatLog.objects.create(
+            user=request.user, 
+            sender='Bot', 
+            message_text=bot_response, 
+            sentiment_score=0.0
+        )
+        
+        all_messages = ChatLog.objects.filter(user=request.user).order_by('-timestamp')[:50]
+        messages_for_display = list(reversed(all_messages))
+        serializer = self.get_serializer(messages_for_display, many=True)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data,
+            'language': 'ar' if is_arabic else 'en'
+        }, status=201)
+
+
+# دالة للحصول على ترجمة ديناميكية للمحتوى
+def get_dynamic_translation(text, is_arabic, context=None):
+    """ترجمة ديناميكية للنصوص باستخدام قاموس مخصص"""
+    
+    translations = {
+        # تلميحات صحية
+        'drink_water': {
+            'ar': '💧 اشرب كوباً من الماء الآن للحفاظ على ترطيب جسمك',
+            'en': '💧 Drink a glass of water now to stay hydrated'
+        },
+        'take_break': {
+            'ar': '🧘 خذ استراحة قصيرة للتمدد وتجنب الإجهاد',
+            'en': '🧘 Take a short break to stretch and avoid stress'
+        },
+        'walk_today': {
+            'ar': '🚶 المشي لمدة 20 دقيقة يحسن صحة القلب ويقلل التوتر',
+            'en': '🚶 Walking for 20 minutes improves heart health and reduces stress'
+        },
+        'sleep_tip': {
+            'ar': '😴 النوم 7-8 ساعات يحسن التركيز والذاكرة',
+            'en': '😴 Sleeping 7-8 hours improves focus and memory'
+        },
+        'healthy_eating': {
+            'ar': '🥗 تناول الخضروات والفواكه يومياً يعزز المناعة',
+            'en': '🥗 Eating vegetables and fruits daily boosts immunity'
+        },
+        'meditation': {
+            'ar': '🧘 التأمل لمدة 5 دقائق يقلل القلق ويحسن المزاج',
+            'en': '🧘 Meditating for 5 minutes reduces anxiety and improves mood'
+        },
+    }
+    
+    if text in translations:
+        return translations[text].get('ar' if is_arabic else 'en', text)
+    
+    return text
+
+
+# تحسين دالة get_smart_recommendations بإضافة نصائح مترجمة ديناميكية
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_smart_recommendations(request):
+    """توصيات ذكية مخصصة مع دعم اللغة المحسّن"""
+    try:
+        user = request.user
+        is_arabic = get_request_language(request) == 'ar'
+        
+        latest_health = HealthStatus.objects.filter(user=user).first()
+        latest_mood = MoodEntry.objects.filter(user=user).first()
+        recent_activities = PhysicalActivity.objects.filter(user=user, start_time__date=date.today()).count()
+        
+        recommendations = []
+        
+        # نصيحة الوزن
+        if latest_health and latest_health.weight_kg:
+            weight = latest_health.weight_kg
+            if weight > 90:
+                recommendations.append({
+                    'icon': '⚖️',
+                    'title': get_translated_response('weight_advice_title', is_arabic) or ('نصائح للوزن' if is_arabic else 'Weight Tips'),
+                    'message': get_translated_response('weight_advice', is_arabic) or 
+                              ('وزنك أعلى من المعدل. جرب المشي 30 دقيقة يومياً' if is_arabic else 'Your weight is above normal. Try walking 30 minutes daily'),
+                    'action': get_translated_response('start_walking', is_arabic) or ('ابدأ المشي اليوم' if is_arabic else 'Start walking today'),
+                    'action_url': '/activities'
+                })
+            elif weight < 50:
+                recommendations.append({
+                    'icon': '⚖️',
+                    'title': get_translated_response('weight_advice_title', is_arabic) or ('نصائح للوزن' if is_arabic else 'Weight Tips'),
+                    'message': get_translated_response('low_weight_advice', is_arabic) or 
+                              ('وزنك أقل من المعدل. أضف وجبات صحية غنية بالسعرات' if is_arabic else 'Your weight is below normal. Add healthy calorie-rich meals'),
+                    'action': get_translated_response('healthy_meals', is_arabic) or ('خطط لوجبات صحية' if is_arabic else 'Plan healthy meals'),
+                    'action_url': '/nutrition'
+                })
+        
+        # نصيحة المزاج
+        if latest_mood and latest_mood.mood in ['Stressed', 'Anxious', 'Sad']:
+            mood_tips = {
+                'Stressed': {
+                    'icon': '🧘',
+                    'title': get_translated_response('stress_relief', is_arabic) or ('تخفيف التوتر' if is_arabic else 'Stress Relief'),
+                    'message': get_translated_response('stressed_advice', is_arabic) or ('جرب تمارين التنفس العميق' if is_arabic else 'Try deep breathing exercises'),
+                    'action': get_translated_response('meditate_now', is_arabic) or ('تأمل لمدة 5 دقائق' if is_arabic else 'Meditate for 5 minutes')
+                },
+                'Anxious': {
+                    'icon': '🌿',
+                    'title': get_translated_response('anxiety_relief', is_arabic) or ('تخفيف القلق' if is_arabic else 'Anxiety Relief'),
+                    'message': get_translated_response('anxious_advice', is_arabic) or ('خذ استراحة قصيرة وتأمل' if is_arabic else 'Take a short break and meditate'),
+                    'action': get_translated_response('take_break', is_arabic) or ('خذ استراحة لمدة 10 دقائق' if is_arabic else 'Take a 10-minute break')
+                },
+                'Sad': {
+                    'icon': '💬',
+                    'title': get_translated_response('mood_improvement', is_arabic) or ('تحسين المزاج' if is_arabic else 'Mood Improvement'),
+                    'message': get_translated_response('sad_advice', is_arabic) or ('تحدث مع شخص تثق به' if is_arabic else 'Talk to someone you trust'),
+                    'action': get_translated_response('reach_out', is_arabic) or ('تواصل مع صديق' if is_arabic else 'Reach out to a friend')
+                }
+            }
+            tip = mood_tips.get(latest_mood.mood, mood_tips['Stressed'])
+            recommendations.append(tip)
+        
+        # نصيحة النشاط
+        if recent_activities == 0:
+            recommendations.append({
+                'icon': '🚶',
+                'title': get_translated_response('activity_reminder', is_arabic) or ('تذكير بالنشاط' if is_arabic else 'Activity Reminder'),
+                'message': get_translated_response('activity_advice', is_arabic) or 
+                          ('لم تمارس أي نشاط اليوم. المشي 10 دقائق مفيد لصحتك' if is_arabic else 'No activity today. 10 minutes of walking is good for your health'),
+                'action': get_translated_response('log_activity', is_arabic) or ('سجل نشاطاً الآن' if is_arabic else 'Log activity now'),
+                'action_url': '/activities'
+            })
+        
+        # نصيحة النوم (إذا كان الوقت مناسباً)
+        current_hour = timezone.now().hour
+        if current_hour >= 22:
+            recommendations.append({
+                'icon': '🌙',
+                'title': get_translated_response('sleep_reminder', is_arabic) or ('تذكير بالنوم' if is_arabic else 'Sleep Reminder'),
+                'message': get_translated_response('sleep_advice', is_arabic) or 
+                          ('حان وقت النوم! النوم الكافي يحسن صحتك ونشاطك' if is_arabic else 'Time to sleep! Adequate sleep improves your health and energy'),
+                'action': get_translated_response('log_sleep', is_arabic) or ('سجل نومك' if is_arabic else 'Log your sleep'),
+                'action_url': '/sleep'
+            })
+        
+        return Response({
+            'success': True,
+            'data': recommendations,
+            'language': 'ar' if is_arabic else 'en',
+            'count': len(recommendations)
+        })
+    except Exception as e:
+        error_msg = get_translated_response('server_error', is_arabic) or ('حدث خطأ في الخادم' if is_arabic else 'Server error occurred')
+        return Response({'success': False, 'error': error_msg}, status=500)
+
+
+# تحسين دالة generate_all_notifications لتمرير اللغة
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_notifications_now(request):
+    """توليد إشعارات ذكية مع دعم اللغة"""
+    from main.services.notification_service import NotificationService
+    try:
+        # ✅ تمرير request لخدمة الإشعارات لاستخدام اللغة
+        count = NotificationService.generate_all_notifications(request.user, request=request)
+        is_arabic = get_request_language(request) == 'ar'
+        success_msg = get_translated_response('notifications_generated', is_arabic) or (f'✅ تم إنشاء {count} إشعار جديد' if is_arabic else f'✅ Created {count} new notifications')
+        return Response({'success': True, 'message': success_msg, 'count': count})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+    
+def get_request_language(request):
+    """استخراج اللغة من الطلب"""
+    # من query params
+    lang_param = request.GET.get('lang')
+    if lang_param in ['ar', 'en']:
+        return lang_param
+    
+    # من headers
+    accept_lang = request.headers.get('Accept-Language', '')
+    if accept_lang.startswith('en'):
+        return 'en'
+    elif accept_lang.startswith('ar'):
+        return 'ar'
+    
+    # من body (POST requests)
+    if request.method == 'POST' and request.body:
+        try:
+            import json
+            body = json.loads(request.body)
+            if body.get('lang') in ['ar', 'en']:
+                return body['lang']
+        except:
+            pass
+    
+    # افتراضياً العربية
+    return 'ar'
+
+
+def get_translated_response(message_key, is_arabic, **kwargs):
+    """الحصول على رسالة مترجمة"""
+    messages = {
+        # رسائل النجاح
+        'profile_updated': {'ar': 'تم تحديث الملف الشخصي بنجاح', 'en': 'Profile updated successfully'},
+        'password_changed': {'ar': 'تم تغيير كلمة المرور بنجاح', 'en': 'Password changed successfully'},
+        'account_deleted': {'ar': 'تم حذف الحساب بنجاح', 'en': 'Account deleted successfully'},
+        'goal_added': {'ar': 'تم إضافة الهدف بنجاح', 'en': 'Goal added successfully'},
+        'goal_updated': {'ar': 'تم تحديث الهدف بنجاح', 'en': 'Goal updated successfully'},
+        'goal_deleted': {'ar': 'تم حذف الهدف بنجاح', 'en': 'Goal deleted successfully'},
+        'settings_saved': {'ar': 'تم حفظ الإعدادات بنجاح', 'en': 'Settings saved successfully'},
+        'notification_created': {'ar': 'تم إنشاء الإشعار بنجاح', 'en': 'Notification created successfully'},
+        'notification_deleted': {'ar': 'تم حذف الإشعار بنجاح', 'en': 'Notification deleted successfully'},
+        'notifications_marked_read': {'ar': 'تم تحديث جميع الإشعارات كمقروءة', 'en': 'All notifications marked as read'},
+        'subscription_saved': {'ar': 'تم حفظ اشتراك الإشعارات بنجاح', 'en': 'Subscription saved successfully'},
+        
+        # رسائل الخطأ
+        'invalid_data': {'ar': 'بيانات غير صالحة', 'en': 'Invalid data'},
+        'invalid_password': {'ar': 'كلمة المرور الحالية غير صحيحة', 'en': 'Current password is incorrect'},
+        'password_too_short': {'ar': 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل', 'en': 'New password must be at least 8 characters'},
+        'goal_not_found': {'ar': 'الهدف غير موجود', 'en': 'Goal not found'},
+        'notification_not_found': {'ar': 'الإشعار غير موجود', 'en': 'Notification not found'},
+        'server_error': {'ar': 'حدث خطأ في الخادم', 'en': 'Server error occurred'},
+        'unauthorized': {'ar': 'غير مصرح بهذا الإجراء', 'en': 'Unauthorized action'},
+    }
+    
+    msg_data = messages.get(message_key, {'ar': message_key, 'en': message_key})
+    text = msg_data.get('ar' if is_arabic else 'en', message_key)
+    
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except:
+            return text
+    return text
 def send_push_notification_to_user(user_id, title, body, url='/'):
     """إرسال إشعار منبثق لمستخدم محدد"""
     try:
@@ -272,48 +720,15 @@ class HabitLogViewSet(viewsets.ModelViewSet):
 
 
 # ==============================================================================
-# 👤 إدارة المستخدمين
-# ==============================================================================
-
-class RegisterUserView(generics.CreateAPIView):
-    queryset = CustomUser.objects.all()
-    serializer_class = UserRegistrationSerializer
-    permission_classes = (AllowAny,)
-
-
-class UserProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    serializer_class = UserProfileSerializer
-    
-    def get_queryset(self):
-        return CustomUser.objects.filter(id=self.request.user.id)
-    
-    def get_object(self):
-        return self.request.user
-    
-    @action(detail=False, methods=['get', 'patch'])
-    def me(self, request):
-        user = request.user
-        if request.method == 'GET':
-            serializer = self.get_serializer(user)
-            return Response(serializer.data)
-        elif request.method == 'PATCH':
-            serializer = self.get_serializer(user, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=400)
-
-
-# ==============================================================================
-# 👤 إدارة الحساب الكاملة
+# 👤 إدارة الحساب الكاملة - مع دعم اللغة
 # ==============================================================================
 
 @api_view(['GET', 'PUT', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def manage_profile(request):
-    """إدارة الملف الشخصي - قراءة وتحديث"""
+    """إدارة الملف الشخصي - قراءة وتحديث مع دعم اللغة"""
     user = request.user
+    is_arabic = get_request_language(request) == 'ar'
     
     if request.method == 'GET':
         return Response({
@@ -329,7 +744,8 @@ def manage_profile(request):
                 'phone_number': getattr(user, 'phone_number', None),
                 'initial_weight': getattr(user, 'initial_weight', None),
                 'height': getattr(user, 'height', None),
-            }
+            },
+            'language': 'ar' if is_arabic else 'en'
         })
     
     elif request.method in ['PUT', 'PATCH']:
@@ -345,37 +761,53 @@ def manage_profile(request):
         
         return Response({
             'success': True,
-            'message': 'تم تحديث الملف الشخصي بنجاح',
+            'message': get_translated_response('profile_updated', is_arabic),
             'data': {
                 'username': user.username,
                 'email': user.email,
                 'first_name': user.first_name,
                 'last_name': user.last_name,
-            }
+            },
+            'language': 'ar' if is_arabic else 'en'
         })
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
-    """تغيير كلمة المرور"""
+    """تغيير كلمة المرور مع دعم اللغة"""
     user = request.user
+    is_arabic = get_request_language(request) == 'ar'
+    
     current_password = request.data.get('current_password')
     new_password = request.data.get('new_password')
     
     if not current_password or not new_password:
-        return Response({'success': False, 'error': 'جميع الحقول مطلوبة'}, status=400)
+        return Response({
+            'success': False, 
+            'error': get_translated_response('invalid_data', is_arabic)
+        }, status=400)
     
     if len(new_password) < 8:
-        return Response({'success': False, 'error': 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل'}, status=400)
+        return Response({
+            'success': False, 
+            'error': get_translated_response('password_too_short', is_arabic)
+        }, status=400)
     
     if not user.check_password(current_password):
-        return Response({'success': False, 'error': 'كلمة المرور الحالية غير صحيحة'}, status=400)
+        return Response({
+            'success': False, 
+            'error': get_translated_response('invalid_password', is_arabic)
+        }, status=400)
     
     user.set_password(new_password)
     user.save()
     
-    return Response({'success': True, 'message': 'تم تغيير كلمة المرور بنجاح'})
+    return Response({
+        'success': True, 
+        'message': get_translated_response('password_changed', is_arabic),
+        'language': 'ar' if is_arabic else 'en'
+    })
 
 
 @api_view(['DELETE'])
@@ -650,22 +1082,126 @@ def get_all_reports_data(request):
 
 
 # ==============================================================================
-# 🌤️ APIs الخارجية - الطقس، الطعام، التمارين
+# 🌤️ APIs الخارجية - مع دعم اللغة
 # ==============================================================================
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_weather(request):
+    """جلب بيانات الطقس مع دعم اللغة"""
     try:
         city = request.query_params.get('city', 'Cairo')
+        is_arabic = get_request_language(request) == 'ar'
+        
         service = WeatherService()
         weather_data = service.get_weather(city)
         
         if weather_data and 'error' not in weather_data:
-            return Response({'success': True, 'data': weather_data})
-        return Response({'success': False, 'error': weather_data.get('error', 'تعذر جلب بيانات الطقس')}, status=500)
+            # ترجمة وصف الطقس
+            if is_arabic:
+                condition_map = {
+                    'clear sky': 'سماء صافية',
+                    'few clouds': 'قليل من الغيوم',
+                    'scattered clouds': 'غيوم متفرقة',
+                    'broken clouds': 'غيوم متكسرة',
+                    'shower rain': 'مطر خفيف',
+                    'rain': 'مطر',
+                    'thunderstorm': 'عاصفة رعدية',
+                    'snow': 'ثلج',
+                    'mist': 'ضباب',
+                }
+                if weather_data.get('description'):
+                    weather_data['description'] = condition_map.get(
+                        weather_data['description'].lower(), 
+                        weather_data['description']
+                    )
+            
+            return Response({
+                'success': True, 
+                'data': weather_data,
+                'language': 'ar' if is_arabic else 'en'
+            })
+        
+        error_msg = get_translated_response('weather_error', is_arabic) or ('تعذر جلب بيانات الطقس' if is_arabic else 'Unable to fetch weather data')
+        return Response({'success': False, 'error': error_msg}, status=500)
+        
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+# ==============================================================================
+# 🤖 الذكاء الاصطناعي والتحليلات - مع دعم اللغة
+# ==============================================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def analyze_sentiment(request):
+    """تحليل المشاعر مع دعم اللغة"""
+    try:
+        text = request.data.get('text', '')
+        is_arabic = get_request_language(request) == 'ar'
+        
+        if not text:
+            error_msg = get_translated_response('text_required', is_arabic) or ('الرجاء إدخال نص للتحليل' if is_arabic else 'Please enter text to analyze')
+            return Response({'success': False, 'error': error_msg}, status=400)
+        
+        analyzer = SentimentAnalyzer(language='ar' if is_arabic else 'en')
+        result = analyzer.analyze(text)
+        
+        return Response({
+            'success': True, 
+            'data': result,
+            'language': 'ar' if is_arabic else 'en'
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_smart_recommendations(request):
+    """توصيات ذكية مخصصة مع دعم اللغة"""
+    try:
+        user = request.user
+        is_arabic = get_request_language(request) == 'ar'
+        
+        latest_health = HealthStatus.objects.filter(user=user).first()
+        latest_mood = MoodEntry.objects.filter(user=user).first()
+        recent_activities = PhysicalActivity.objects.filter(user=user, start_time__date=date.today()).count()
+        
+        recommendations = []
+        
+        if latest_health and latest_health.weight_kg and latest_health.weight_kg > 90:
+            recommendations.append({
+                'icon': '⚖️', 
+                'message': get_translated_response('weight_advice', is_arabic) or 
+                          ('وزنك أعلى من المعدل. جرب المشي 30 دقيقة يومياً' if is_arabic else 'Your weight is above normal. Try walking 30 minutes daily')
+            })
+        
+        if latest_mood and latest_mood.mood in ['Stressed', 'Anxious', 'Sad']:
+            mood_advice = {
+                'Stressed': get_translated_response('stressed_advice', is_arabic) or ('جرب تمارين التنفس العميق' if is_arabic else 'Try deep breathing exercises'),
+                'Anxious': get_translated_response('anxious_advice', is_arabic) or ('خذ استراحة قصيرة وتأمل' if is_arabic else 'Take a short break and meditate'),
+                'Sad': get_translated_response('sad_advice', is_arabic) or ('تحدث مع شخص تثق به' if is_arabic else 'Talk to someone you trust')
+            }
+            recommendations.append({
+                'icon': '🧘', 
+                'message': mood_advice.get(latest_mood.mood, get_translated_response('mood_advice', is_arabic) or ('اهتم بصحتك النفسية' if is_arabic else 'Take care of your mental health'))
+            })
+        
+        if recent_activities == 0:
+            recommendations.append({
+                'icon': '🚶', 
+                'message': get_translated_response('activity_advice', is_arabic) or 
+                          ('لم تمارس أي نشاط اليوم. المشي 10 دقائق مفيد لصحتك' if is_arabic else 'No activity today. 10 minutes of walking is good for your health')
+            })
+        
+        return Response({
+            'success': True, 
+            'data': recommendations,
+            'language': 'ar' if is_arabic else 'en'
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
 
 
 @api_view(['GET'])
@@ -733,133 +1269,19 @@ def suggest_exercises(request):
 
 
 # ==============================================================================
-# 🤖 الذكاء الاصطناعي والتحليلات
+# 🧠 التحليلات الذكية - مع دعم اللغة
 # ==============================================================================
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def analyze_sentiment(request):
-    """تحليل المشاعر باستخدام Groq API"""
-    try:
-        text = request.data.get('text', '')
-        if not text:
-            return Response({'success': False, 'error': 'الرجاء إدخال نص للتحليل'}, status=400)
-        
-        analyzer = SentimentAnalyzer()
-        result = analyzer.analyze(text)
-        return Response({'success': True, 'data': result})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_smart_recommendations(request):
-    """توصيات ذكية مخصصة للمستخدم"""
-    try:
-        user = request.user
-        latest_health = HealthStatus.objects.filter(user=user).first()
-        latest_mood = MoodEntry.objects.filter(user=user).first()
-        recent_activities = PhysicalActivity.objects.filter(user=user, start_time__date=date.today()).count()
-        
-        recommendations = []
-        
-        if latest_health and latest_health.weight_kg and latest_health.weight_kg > 90:
-            recommendations.append({'icon': '⚖️', 'message': 'وزنك أعلى من المعدل. جرب المشي 30 دقيقة يومياً'})
-        
-        if latest_mood and latest_mood.mood in ['Stressed', 'Anxious', 'Sad']:
-            recommendations.append({'icon': '🧘', 'message': 'مزاجك متعب اليوم. جرب تمارين التنفس العميق'})
-        
-        if recent_activities == 0:
-            recommendations.append({'icon': '🚶', 'message': 'لم تمارس أي نشاط اليوم. المشي 10 دقائق مفيد لصحتك'})
-        
-        return Response({'success': True, 'data': recommendations})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-class ChatLogViewSet(BaseUserViewSet):
-    queryset = ChatLog.objects.all()
-    serializer_class = ChatLogSerializer
-    
-    @action(detail=False, methods=['post'])
-    def send_message(self, request):
-        message = request.data.get('message', '')
-        if not message:
-            return Response({'error': 'الرسالة مطلوبة'}, status=400)
-        
-        user_message = ChatLog.objects.create(user=request.user, sender='User', message_text=message, sentiment_score=0.0)
-        
-        recent_messages = ChatLog.objects.filter(user=request.user).order_by('timestamp')[:20]
-        chat_history = [{'sender': msg.sender, 'message': msg.message_text} for msg in recent_messages]
-        
-        try:
-            llama_service = LlamaService()
-            bot_response = llama_service.get_chat_response(message, request.user, chat_history)
-        except Exception as e:
-            bot_response = f"عذراً {request.user.username}، حدث خطأ غير متوقع."
-        
-        bot_message = ChatLog.objects.create(user=request.user, sender='Bot', message_text=bot_response, sentiment_score=0.0)
-        
-        all_messages = ChatLog.objects.filter(user=request.user).order_by('-timestamp')[:50]
-        messages_for_display = list(reversed(all_messages))
-        serializer = self.get_serializer(messages_for_display, many=True)
-        return Response(serializer.data, status=201)
-
-
-# ==============================================================================
-# 🧠 التحليلات المتقدمة
-# ==============================================================================
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def nutrition_insights(request):
-    """تحليلات التغذية المتقدمة"""
-    user = request.user
-    meals = Meal.objects.filter(user=user)
-    
-    if not meals.exists():
-        return Response({
-            'total_meals': 0, 'avg_calories': 0, 'avg_protein': 0, 'avg_carbs': 0, 'avg_fat': 0,
-            'total_protein': 0, 'total_carbs': 0, 'total_fat': 0, 'meal_distribution': {},
-            'trend': 'insufficient_data', 'recommendations': []
-        })
-    
-    totals = meals.aggregate(
-        total_calories=Sum('total_calories'), total_protein=Sum('total_protein'),
-        total_carbs=Sum('total_carbs'), total_fat=Sum('total_fat')
-    )
-    
-    total_meals = meals.count()
-    avg_calories = (totals['total_calories'] or 0) / total_meals
-    
-    meal_distribution = meals.values('meal_type').annotate(count=Count('id'))
-    distribution_dict = {item['meal_type']: item['count'] for item in meal_distribution}
-    
-    return Response({
-        'total_meals': total_meals,
-        'avg_calories': round(avg_calories, 1),
-        'avg_protein': round(float(totals['total_protein'] or 0) / total_meals, 1),
-        'avg_carbs': round(float(totals['total_carbs'] or 0) / total_meals, 1),
-        'avg_fat': round(float(totals['total_fat'] or 0) / total_meals, 1),
-        'total_protein': round(float(totals['total_protein'] or 0), 1),
-        'total_carbs': round(float(totals['total_carbs'] or 0), 1),
-        'total_fat': round(float(totals['total_fat'] or 0), 1),
-        'meal_distribution': distribution_dict,
-        'trend': 'stable', 'recommendations': []
-    })
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def smart_insights(request):
-    """تحليلات ذكية متكاملة"""
+    """تحليلات ذكية متكاملة مع دعم اللغة"""
     user = request.user
     today = timezone.now()
     week_ago = today - timedelta(days=7)
     
-    lang = request.GET.get('lang', 'ar')
-    is_arabic = lang.startswith('ar')
+    lang = get_request_language(request)
+    is_arabic = lang == 'ar'
     
     habits = HabitDefinition.objects.filter(user=user)
     habit_logs = HabitLog.objects.filter(habit__user=user, log_date__gte=week_ago.date())
@@ -881,38 +1303,67 @@ def smart_insights(request):
     
     if avg_sleep < 7:
         recommendations.append({
-            'icon': '🌙', 'title': 'نم أكثر لتحسين صحتك' if is_arabic else 'Get Enough Sleep',
-            'tips': ['حدد موعداً ثابتاً للنوم' if is_arabic else 'Set a fixed bedtime',
-                     'ابتعد عن الشاشات قبل النوم' if is_arabic else 'Avoid screens before sleep'],
-            'based_on': '7 أيام' if is_arabic else '7 days', 'improvement_chance': 80
+            'icon': '🌙', 
+            'title': get_translated_response('sleep_more_title', is_arabic) or ('نم أكثر لتحسين صحتك' if is_arabic else 'Get Enough Sleep'),
+            'tips': [
+                get_translated_response('sleep_tip_1', is_arabic) or ('حدد موعداً ثابتاً للنوم' if is_arabic else 'Set a fixed bedtime'),
+                get_translated_response('sleep_tip_2', is_arabic) or ('ابتعد عن الشاشات قبل النوم' if is_arabic else 'Avoid screens before sleep')
+            ],
+            'based_on': get_translated_response('based_on_7_days', is_arabic) or ('7 أيام' if is_arabic else '7 days'),
+            'improvement_chance': 80
         })
     
     if completion_rate < 50:
         recommendations.append({
-            'icon': '💊', 'title': 'التزم بعاداتك اليومية' if is_arabic else 'Stick to Daily Habits',
-            'tips': ['ابدأ بعادة صغيرة وسهلة' if is_arabic else 'Start with a small, easy habit'],
-            'based_on': 'اليوم' if is_arabic else 'Today', 'improvement_chance': 90
+            'icon': '💊', 
+            'title': get_translated_response('habits_title', is_arabic) or ('التزم بعاداتك اليومية' if is_arabic else 'Stick to Daily Habits'),
+            'tips': [
+                get_translated_response('habits_tip_1', is_arabic) or ('ابدأ بعادة صغيرة وسهلة' if is_arabic else 'Start with a small, easy habit')
+            ],
+            'based_on': get_translated_response('based_on_today', is_arabic) or ('اليوم' if is_arabic else 'Today'),
+            'improvement_chance': 90
         })
     
     if avg_calories < 1500:
         recommendations.append({
-            'icon': '🥗', 'title': 'نظام غذائي متوازن' if is_arabic else 'Balanced Nutrition',
-            'tips': ['أضف وجبات خفيفة صحية' if is_arabic else 'Add healthy snacks'],
-            'based_on': 'آخر أسبوع' if is_arabic else 'Last week', 'improvement_chance': 85
+            'icon': '🥗', 
+            'title': get_translated_response('nutrition_title', is_arabic) or ('نظام غذائي متوازن' if is_arabic else 'Balanced Nutrition'),
+            'tips': [
+                get_translated_response('nutrition_tip_1', is_arabic) or ('أضف وجبات خفيفة صحية' if is_arabic else 'Add healthy snacks')
+            ],
+            'based_on': get_translated_response('based_on_last_week', is_arabic) or ('آخر أسبوع' if is_arabic else 'Last week'),
+            'improvement_chance': 85
         })
+    
+    # ترجمة المزاج السائد
+    mood_translation = {
+        'Excellent': 'ممتاز' if is_arabic else 'Excellent',
+        'Good': 'جيد' if is_arabic else 'Good',
+        'Neutral': 'محايد' if is_arabic else 'Neutral',
+        'Stressed': 'مرهق' if is_arabic else 'Stressed',
+        'Anxious': 'قلق' if is_arabic else 'Anxious',
+        'Sad': 'حزين' if is_arabic else 'Sad'
+    }
+    
+    dominant_mood_text = mood_translation.get(dominant_mood['mood'] if dominant_mood else '', 
+                                               ('غير متوفر' if is_arabic else 'Not available'))
     
     return Response({
         'success': True,
         'data': {
             'summary': {
-                'total_habits': total_habits, 'completed_today': completed_today,
-                'completion_rate': completion_rate, 'avg_sleep': round(float(avg_sleep), 1),
-                'dominant_mood': dominant_mood['mood'] if dominant_mood else ('غير متوفر' if is_arabic else 'Not available'),
+                'total_habits': total_habits, 
+                'completed_today': completed_today,
+                'completion_rate': completion_rate, 
+                'avg_sleep': round(float(avg_sleep), 1),
+                'dominant_mood': dominant_mood_text,
                 'avg_calories': round(float(avg_calories))
             },
             'recommendations': recommendations
-        }
+        },
+        'language': 'ar' if is_arabic else 'en'
     })
+
 
 
 @api_view(['GET'])
@@ -952,7 +1403,7 @@ def cross_insights(request):
 
 
 # ==============================================================================
-# 🔔 الإشعارات - ViewSet وإدارة الإشعارات
+# 🔔 الإشعارات - مع دعم اللغة
 # ==============================================================================
 
 class NotificationViewSet(viewsets.ModelViewSet):
@@ -964,6 +1415,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
     
     def list(self, request, *args, **kwargs):
         try:
+            is_arabic = get_request_language(request) == 'ar'
             notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
             
             notifications_list = []
@@ -982,12 +1434,22 @@ class NotificationViewSet(viewsets.ModelViewSet):
             return Response({
                 'success': True,
                 'count': len(notifications_list),
-                'results': notifications_list
+                'results': notifications_list,
+                'language': 'ar' if is_arabic else 'en'
             })
         except Exception as e:
-            print(f"Error in list: {e}")
             return Response({'success': True, 'count': 0, 'results': []})
     
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        is_arabic = get_request_language(request) == 'ar'
+        count = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({
+            'success': True, 
+            'count': count,
+            'message': get_translated_response('notifications_marked_read', is_arabic),
+            'language': 'ar' if is_arabic else 'en'
+        })    
     def create(self, request, *args, **kwargs):
         try:
             data = request.data
@@ -1659,16 +2121,30 @@ def send_push_to_user(user_id, title, body, url='/'):
         print(f"Push error for user {user_id}: {e}")
 
 
+# ==============================================================================
+# 📅 endpoints عامة لـ Cron Jobs - مع دعم اللغة
+# ==============================================================================
+
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_daily_summary(request):
-    """إرسال ملخص اليوم لجميع المستخدمين - لـ cron-job.org (مع Push)"""
+    """إرسال ملخص اليوم لجميع المستخدمين - مع دعم اللغة"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         today = timezone.now().date()
         total = 0
         
         for user in users:
+            # تحديد لغة المستخدم
+            user_lang = 'ar'
+            try:
+                if hasattr(user, 'profile') and user.profile.language:
+                    user_lang = user.profile.language
+            except:
+                pass
+            
+            is_arabic = user_lang == 'ar'
+            
             # إحصائيات اليوم
             activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
             total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
@@ -1681,22 +2157,49 @@ def cron_daily_summary(request):
             sleep_hours = sleep.duration_hours if sleep else 0
             
             # رسالة مختصرة للإشعار المنبثق
-            push_message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}"
-            if sleep_hours > 0:
-                push_message += f" | 😴 نوم: {sleep_hours} ساعات"
+            if is_arabic:
+                push_message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}"
+                if sleep_hours > 0:
+                    push_message += f" | 😴 نوم: {sleep_hours} ساعات"
+                title = "🌙 ملخص يومك"
+            else:
+                push_message = f"📊 Activity: {total_minutes} min | 🍽️ Calories: {total_calories_consumed}"
+                if sleep_hours > 0:
+                    push_message += f" | 😴 Sleep: {sleep_hours} hours"
+                title = "🌙 Your Daily Summary"
             
             # رسالة كاملة للإشعار داخل التطبيق
-            full_message = f"📊 ملخص يومك:\n"
-            full_message += f"🚶 نشاط: {total_minutes} دقيقة\n"
-            full_message += f"🔥 سعرات محروقة: {total_calories_burned}\n"
-            full_message += f"🍽️ سعرات متناولة: {total_calories_consumed}\n"
-            if sleep_hours > 0:
-                full_message += f"😴 نوم: {sleep_hours} ساعات"
+            if is_arabic:
+                full_message = f"📊 **ملخص يومك**\n\n"
+                full_message += f"🚶 النشاط: {total_minutes} دقيقة ({total_calories_burned} سعرة)\n"
+                full_message += f"🍽️ السعرات المتناولة: {total_calories_consumed}\n"
+                if sleep_hours > 0:
+                    full_message += f"😴 النوم: {sleep_hours} ساعات\n"
+                
+                if total_minutes < 30:
+                    full_message += f"\n⚠️ نشاطك اليومي منخفض! حاول المشي 30 دقيقة غداً."
+                elif total_calories_consumed < 1200:
+                    full_message += f"\n⚠️ سعراتك الحرارية منخفضة! تناول وجبات متوازنة."
+                else:
+                    full_message += f"\n🎉 أداء ممتاز! حافظ على هذا المستوى."
+            else:
+                full_message = f"📊 **Your Daily Summary**\n\n"
+                full_message += f"🚶 Activity: {total_minutes} min ({total_calories_burned} cal)\n"
+                full_message += f"🍽️ Calories consumed: {total_calories_consumed}\n"
+                if sleep_hours > 0:
+                    full_message += f"😴 Sleep: {sleep_hours} hours\n"
+                
+                if total_minutes < 30:
+                    full_message += f"\n⚠️ Your daily activity is low! Try walking 30 minutes tomorrow."
+                elif total_calories_consumed < 1200:
+                    full_message += f"\n⚠️ Your calorie intake is low! Eat balanced meals."
+                else:
+                    full_message += f"\n🎉 Great performance! Keep it up."
             
             # ✅ حفظ في قاعدة البيانات
             Notification.objects.create(
                 user=user,
-                title="🌙 ملخص يومك",
+                title=title,
                 message=full_message,
                 type="summary",
                 priority="medium",
@@ -1705,7 +2208,7 @@ def cron_daily_summary(request):
             )
             
             # ✅ إرسال إشعار منبثق
-            send_push_to_user(user.id, "🌙 ملخص يومك", push_message, "/dashboard")
+            send_push_to_user(user.id, title, push_message, "/dashboard")
             total += 1
         
         return Response({
@@ -1715,7 +2218,6 @@ def cron_daily_summary(request):
         })
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
-
 
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
@@ -2034,11 +2536,18 @@ def generate_notifications_now(request):
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
+# ==============================================================================
+# ⌚ بيانات الساعة الذكية - مع دعم اللغة
+# ==============================================================================
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def adb_watch_data(request):
+    """استقبال بيانات من ESP32 مع دعم اللغة"""
     try:
         data = request.data
+        is_arabic = get_request_language(request) == 'ar'
+        
         logger.info(f"📡 ESP32 data received: {data}")
         
         heart_rate = data.get('bpm') or data.get('heart_rate') or data.get('heartRate')
@@ -2058,17 +2567,21 @@ def adb_watch_data(request):
         
         logger.info(f"✅ ESP32 data saved: ID={health_data.id}, HR={heart_rate}, SpO2={spo2}")
         
+        success_msg = get_translated_response('esp32_data_received', is_arabic) or ('تم استلام بيانات ESP32 بنجاح' if is_arabic else 'ESP32 data received successfully')
+        
         return Response({
             'success': True,
-            'message': 'تم استلام بيانات ESP32 بنجاح',
+            'message': success_msg,
             'data': {
                 'id': health_data.id,
                 'heart_rate': health_data.heart_rate,
                 'spo2': health_data.spo2,
                 'recorded_at': health_data.recorded_at.isoformat()
-            }
+            },
+            'language': 'ar' if is_arabic else 'en'
         })
         
     except Exception as e:
         logger.error(f"❌ ESP32 data error: {e}")
-        return Response({'success': False, 'error': str(e)}, status=500)
+        error_msg = get_translated_response('esp32_error', is_arabic) or ('خطأ في معالجة بيانات ESP32' if is_arabic else 'Error processing ESP32 data')
+        return Response({'success': False, 'error': error_msg}, status=500)
