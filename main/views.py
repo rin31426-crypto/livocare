@@ -1553,3 +1553,112 @@ class RegisterUserView(generics.CreateAPIView):
                 'access': str(refresh.access_token),
             }
         }, status=status.HTTP_201_CREATED)
+# أضف هذا في نهاية main/views.py
+
+# ==============================================================================
+# 📊 دوال إضافية
+# ==============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def nutrition_insights(request):
+    """
+    تحليلات التغذية المتقدمة
+    Advanced nutrition insights
+    """
+    try:
+        user = request.user
+        is_arabic = get_request_language(request) == 'ar'
+        today = timezone.now().date()
+        week_ago = today - timedelta(days=7)
+        
+        # إحصائيات الوجبات
+        meals = Meal.objects.filter(user=user, meal_time__date__gte=week_ago)
+        total_meals = meals.count()
+        avg_calories = meals.aggregate(Avg('total_calories'))['total_calories__avg'] or 0
+        total_calories = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
+        
+        # الوجبات حسب النوع
+        meals_by_type = meals.values('meal_type').annotate(
+            count=Count('id'),
+            avg_calories=Avg('total_calories')
+        )
+        
+        # أكثر المكونات استخداماً
+        all_ingredients = []
+        for meal in meals:
+            if meal.ingredients:
+                all_ingredients.extend([i.get('name', '') for i in meal.ingredients if i.get('name')])
+        
+        from collections import Counter
+        top_ingredients = Counter(all_ingredients).most_common(5)
+        
+        # نصائح غذائية
+        tips = []
+        if avg_calories < 1500:
+            tips.append({
+                'icon': '🍽️',
+                'title': 'سعرات منخفضة' if is_arabic else 'Low Calories',
+                'message': 'سعراتك الحرارية أقل من الموصى بها' if is_arabic else 'Your calories are below recommended',
+                'advice': 'أضف وجبات خفيفة صحية مثل المكسرات والفواكه' if is_arabic else 'Add healthy snacks like nuts and fruits'
+            })
+        elif avg_calories > 2500:
+            tips.append({
+                'icon': '⚠️',
+                'title': 'سعرات مرتفعة' if is_arabic else 'High Calories',
+                'message': 'سعراتك الحرارية أعلى من الموصى بها' if is_arabic else 'Your calories are above recommended',
+                'advice': 'قلل من الكربوهيدرات البسيطة وزد من الخضروات' if is_arabic else 'Reduce simple carbs and increase vegetables'
+            })
+        
+        return Response({
+            'success': True,
+            'data': {
+                'period': {
+                    'days': 7,
+                    'start': week_ago.isoformat(),
+                    'end': today.isoformat()
+                },
+                'summary': {
+                    'total_meals': total_meals,
+                    'avg_daily_calories': round(avg_calories, 0),
+                    'total_calories': total_calories,
+                    'avg_meals_per_day': round(total_meals / 7, 1) if total_meals > 0 else 0
+                },
+                'meals_by_type': list(meals_by_type),
+                'top_ingredients': [{'name': name, 'count': count} for name, count in top_ingredients],
+                'recommendations': tips
+            },
+            'language': 'ar' if is_arabic else 'en'
+        })
+        
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+class RegisterUserView(generics.CreateAPIView):
+    """تسجيل مستخدم جديد"""
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [AllowAny]
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'success': True,
+            'message': 'تم إنشاء الحساب بنجاح',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            },
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
