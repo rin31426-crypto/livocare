@@ -135,70 +135,7 @@ class HabitLogViewSet(viewsets.ModelViewSet):
         })
 
 
-# 3. إضافة دعم اللغة في HealthSummaryView
-class HealthSummaryView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        user = request.user
-        is_arabic = get_request_language(request) == 'ar'
-        today = date.today()
-        
-        # ترجمة المزاج
-        mood_translation = {
-            'Excellent': 'ممتاز' if is_arabic else 'Excellent',
-            'Good': 'جيد' if is_arabic else 'Good',
-            'Neutral': 'محايد' if is_arabic else 'Neutral',
-            'Stressed': 'مرهق' if is_arabic else 'Stressed',
-            'Anxious': 'قلق' if is_arabic else 'Anxious',
-            'Sad': 'حزين' if is_arabic else 'Sad',
-            'N/A': 'غير متوفر' if is_arabic else 'N/A'
-        }
-        
-        last_mood_entry = MoodEntry.objects.filter(user=user, entry_time__date=today).order_by('-entry_time').first()
-        current_mood = last_mood_entry.mood if last_mood_entry else "N/A"
-        
-        activity_summary = PhysicalActivity.objects.filter(
-            user=user, start_time__date=today
-        ).aggregate(total_calories_burned=Sum('calories_burned'), total_duration_minutes=Sum('duration_minutes'))
-        
-        sleep_summary = Sleep.objects.filter(
-            user=user, sleep_end__date=today
-        ).aggregate(average_sleep_quality=Avg('quality_rating'))
-        
-        meal_summary = Meal.objects.filter(
-            user=user, meal_time__date=today
-        ).aggregate(total_calories_consumed=Sum('total_calories'))
-        
-        last_health_status = HealthStatus.objects.filter(user=user).order_by('-recorded_at').first()
-        
-        return Response({
-            "success": True,
-            "date": today.isoformat(),
-            "language": 'ar' if is_arabic else 'en',
-            "activities": {
-                "total_calories_burned": activity_summary.get('total_calories_burned') or 0,
-                "total_duration_minutes": activity_summary.get('total_duration_minutes') or 0,
-                "unit_calories": "سعرة" if is_arabic else "cal",
-                "unit_minutes": "دقيقة" if is_arabic else "min"
-            },
-            "sleep": {
-                "average_sleep_quality": round(sleep_summary.get('average_sleep_quality') or 0, 1),
-                "unit_quality": "من 5" if is_arabic else "/5"
-            },
-            "nutrition": {
-                "total_calories_consumed": meal_summary.get('total_calories_consumed') or 0,
-                "unit": "سعرة" if is_arabic else "cal"
-            },
-            "mood": {
-                "last_recorded_mood": mood_translation.get(current_mood, current_mood)
-            },
-            "biometrics": {
-                "last_weight_kg": last_health_status.weight_kg if last_health_status else "N/A",
-                "last_blood_pressure": f"{last_health_status.systolic_pressure}/{last_health_status.diastolic_pressure}" if last_health_status else "N/A",
-                "unit_weight": "كجم" if is_arabic else "kg"
-            }
-        })
+
 def get_user_preferred_language(user, request=None):
     """
     الحصول على اللغة المفضلة للمستخدم من:
