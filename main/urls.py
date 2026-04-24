@@ -71,7 +71,7 @@ base_urls = [
     path('cross-insights/', cross_insights, name='cross-insights'),
     path('analytics/smart-insights/', smart_insights, name='smart-insights'),
     path('analytics/cross-insights/', cross_insights, name='cross-insights-alt'),
-    
+    path('blood-sugar/', views.get_blood_sugar, name='blood-sugar'),
     # 🌤️ الطقس
     path('weather/', get_weather, name='weather'),
     
@@ -133,7 +133,8 @@ base_urls = [
     path('my-notifications/', get_my_notifications, name='my-notifications'),
     path('sw-notification/', save_notification_from_sw, name='sw-notification'),
     path('auth/register/', RegisterUserView.as_view(), name='register'),
-    
+    path('notifications-simple/', get_notifications_simple, name='notifications-simple'),
+
     # 🤖 إشعارات ذكية
     path('smart-notifications/', check_and_send_smart_notifications, name='smart-notifications'),
     path('daily-summary/', send_daily_summary_notification, name='daily-summary'),

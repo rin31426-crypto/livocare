@@ -1662,3 +1662,18 @@ class RegisterUserView(generics.CreateAPIView):
                 'access': str(refresh.access_token),
             }
         }, status=status.HTTP_201_CREATED)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_blood_sugar(request):
+    """جلب بيانات سكر الدم"""
+    try:
+        latest = HealthStatus.objects.filter(user=request.user).order_by('-recorded_at').first()
+        if latest and latest.blood_glucose:
+            return Response({
+                'success': True,
+                'blood_sugar': latest.blood_glucose,
+                'recorded_at': latest.recorded_at
+            })
+        return Response({'success': True, 'blood_sugar': None})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
