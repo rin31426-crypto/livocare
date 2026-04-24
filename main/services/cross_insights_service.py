@@ -319,3 +319,79 @@ class HealthInsightsEngine:
     def generate_predictive_alerts(self):
         """توليد تنبيهات تنبؤية"""
         return []
+# أضف هذا في نهاية ملف main/services/cross_insights_service.py
+
+class CrossInsightsService:
+    """
+    خدمة التحليلات المتقاطعة الأساسية
+    Basic Cross-Insights Service
+    """
+    
+    def __init__(self, user):
+        self.user = user
+        self.engine = HealthInsightsEngine(user)
+    
+    def get_all_correlations(self):
+        """
+        جلب جميع الارتباطات والتحليلات
+        Get all correlations and analyses
+        """
+        try:
+            # استخدام المحرك الرئيسي للحصول على التحليلات
+            all_analyses = self.engine.analyze_all()
+            
+            return {
+                'success': True,
+                'correlations': {
+                    'vital_signs': all_analyses.get('vital_signs_analysis', {}),
+                    'activity_nutrition': all_analyses.get('activity_nutrition_correlation', {}),
+                    'sleep_mood': all_analyses.get('sleep_mood_correlation', {}),
+                    'weight_trends': all_analyses.get('weight_trend_analysis', {}),
+                    'blood_pressure': all_analyses.get('blood_pressure_insights', {}),
+                    'glucose_risk': all_analyses.get('glucose_risk_assessment', {}),
+                },
+                'insights': {
+                    'energy_consumption': all_analyses.get('energy_consumption_alert', {}),
+                    'pulse_pressure': all_analyses.get('pulse_pressure_analysis', {}),
+                    'pre_exercise': all_analyses.get('pre_exercise_recommendation', {}),
+                },
+                'recommendations': all_analyses.get('holistic_recommendations', []),
+                'alerts': all_analyses.get('predictive_alerts', []),
+                'timestamp': timezone.now().isoformat()
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'correlations': {},
+                'insights': {},
+                'recommendations': [],
+                'alerts': []
+            }
+    
+    def get_vital_correlations(self):
+        """الحصول على ارتباطات العلامات الحيوية"""
+        analysis = self.engine.analyze_vital_signs()
+        return {
+            'vital_signs': analysis.get('vital_signs'),
+            'insights': analysis.get('insights', []),
+            'alerts': analysis.get('alerts', [])
+        }
+    
+    def get_lifestyle_correlations(self):
+        """الحصول على ارتباطات نمط الحياة"""
+        return {
+            'activity_nutrition': self.engine.analyze_activity_nutrition(),
+            'sleep_mood': self.engine.analyze_sleep_mood(),
+            'energy_balance': self.engine.analyze_energy_consumption()
+        }
+    
+    def get_risk_assessment(self):
+        """تقييم المخاطر الصحية"""
+        return {
+            'pre_exercise_risk': self.engine.analyze_pre_exercise_risk(),
+            'blood_pressure_risk': self.engine.analyze_blood_pressure(),
+            'glucose_risk': self.engine.analyze_glucose_risks(),
+            'pulse_pressure': self.engine.analyze_pulse_pressure()
+        }
