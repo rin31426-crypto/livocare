@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import UserProfile
+from .models import CustomUser
 
 User = get_user_model()
 
@@ -14,7 +14,7 @@ User = get_user_model()
 def create_user_profile(sender, instance, created, **kwargs):
     """إنشاء ملف تعريف للمستخدم عند إنشاء حساب جديد"""
     if created:
-        UserProfile.objects.create(user=instance)
+        CustomUser.objects.create(user=instance)
 
 
 @receiver(post_save, sender=User)
