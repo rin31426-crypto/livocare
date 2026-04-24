@@ -37,393 +37,59 @@ from .serializers import (
 from .services.nutrition_service import NutritionService
 from .services.weather_service import WeatherService
 from .services.exercise_service import AdvancedHealthAnalytics
-from .services.cross_insights_service import HealthInsightsEngine
+from .services.cross_insights_service import HealthInsightsEngine, CrossInsightsService
 from .services.habit_analytics_service import HabitAnalyticsService
 from .services.ai_chat_service import LlamaService
 from .services.sentiment_service import SentimentAnalyzer
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
 # ==============================================================================
-# 📱 إرسال إشعارات منبثقة (Push)
-# ==============================================================================
-# main/views.py
-# أضف هذه الدوال المساعدة في بداية الملف
-# ==============================================================================
-# 🔧 تحسينات إضافية لنظام اللغة
+# 🔧 دوال مساعدة (Helper Functions)
 # ==============================================================================
 
-# أضف هذه الدالة الإضافية في بداية الملف
-# ==============================================================================
-# 🔧 تحسينات إضافية - يمكن إضافتها
-# ==============================================================================
-
-# 1. دالة لتوحيد تنسيق الردود مع اللغة
-def api_response(success, data=None, message_key=None, is_arabic=None, request=None, **kwargs):
-    """توحيد تنسيق الردود مع دعم اللغة"""
-    if is_arabic is None and request:
-        is_arabic = get_request_language(request) == 'ar'
-    elif is_arabic is None:
-        is_arabic = True
-    
-    response = {
-        'success': success,
-        'language': 'ar' if is_arabic else 'en',
-        'timestamp': timezone.now().isoformat()
-    }
-    
-    if data is not None:
-        response['data'] = data
-    
-    if message_key:
-        response['message'] = get_translated_response(message_key, is_arabic, **kwargs)
-    
-    return Response(response, status=kwargs.get('status', 200))
-
-
-# 2. إضافة دعم اللغة في HabitLogViewSet
-class HabitLogViewSet(viewsets.ModelViewSet):
-    # ... الكود الموجود ...
-    
-    @action(detail=False, methods=['get'])
-    def today(self, request):
-        is_arabic = get_request_language(request) == 'ar'
-        today = timezone.now().date()
-        logs = HabitLog.objects.filter(habit__user=request.user, log_date=today).select_related('habit')
-        all_habits = HabitDefinition.objects.filter(user=request.user, is_active=True)
-        
-        result = []
-        log_habit_ids = logs.values_list('habit_id', flat=True)
-        
-        for log in logs:
-            result.append({
-                'id': log.id,
-                'habit': {
-                    'id': log.habit.id, 
-                    'name': log.habit.name, 
-                    'description': log.habit.description
-                },
-                'is_completed': log.is_completed,
-                'actual_value': log.actual_value,
-                'notes': log.notes,
-                'log_date': log.log_date,
-            })
-        
-        for habit in all_habits:
-            if habit.id not in log_habit_ids:
-                result.append({
-                    'id': None,
-                    'habit': {
-                        'id': habit.id, 
-                        'name': habit.name, 
-                        'description': habit.description
-                    },
-                    'is_completed': False,
-                    'actual_value': None,
-                    'notes': None,
-                    'log_date': today,
-                })
-        
-        return Response({
-            'success': True,
-            'data': result,
-            'language': 'ar' if is_arabic else 'en',
-            'message': get_translated_response('habits_loaded', is_arabic) or 
-                      ('تم تحميل العادات بنجاح' if is_arabic else 'Habits loaded successfully')
-        })
-
-
-
-def get_user_preferred_language(user, request=None):
-    """
-    الحصول على اللغة المفضلة للمستخدم من:
-    1. الطلب (request)
-    2. ملف تعريف المستخدم
-    3. الإعدادات العامة
-    """
-    # 1. من الطلب
-    if request:
-        lang = get_request_language(request)
-        if lang in ['ar', 'en']:
-            return lang
-    
-    # 2. من ملف تعريف المستخدم
-    try:
-        if hasattr(user, 'profile') and user.profile.language:
-            return user.profile.language
-    except:
-        pass
-    
-    # 3. من إعدادات المستخدم
-    if hasattr(user, 'language') and user.language:
-        return user.language
-    
-    # 4. افتراضياً العربية
-    return 'ar'
-
-
-# أضف هذه الدوال للـ ChatLog ViewSet
-
-class ChatLogViewSet(BaseUserViewSet):
-    queryset = ChatLog.objects.all()
-    serializer_class = ChatLogSerializer
-    
-    @action(detail=False, methods=['post'])
-    def send_message(self, request):
-        message = request.data.get('message', '')
-        if not message:
-            error_msg = get_translated_response('message_required', is_arabic) or ('الرسالة مطلوبة' if is_arabic else 'Message is required')
-            return Response({'error': error_msg}, status=400)
-        
-        is_arabic = get_request_language(request) == 'ar'
-        
-        user_message = ChatLog.objects.create(
-            user=request.user, 
-            sender='User', 
-            message_text=message, 
-            sentiment_score=0.0
-        )
-        
-        recent_messages = ChatLog.objects.filter(user=request.user).order_by('timestamp')[:20]
-        chat_history = [{'sender': msg.sender, 'message': msg.message_text} for msg in recent_messages]
-        
-        try:
-            llama_service = LlamaService()
-            bot_response = llama_service.get_chat_response(
-                message, 
-                request.user, 
-                chat_history,
-                request=request  # ✅ تمرير الطلب للخدمة
-            )
-        except Exception as e:
-            bot_response = get_translated_response('chat_error', is_arabic) or (
-                f"عذراً {request.user.username}، حدث خطأ غير متوقع." if is_arabic 
-                else f"Sorry {request.user.username}, an unexpected error occurred."
-            )
-        
-        bot_message = ChatLog.objects.create(
-            user=request.user, 
-            sender='Bot', 
-            message_text=bot_response, 
-            sentiment_score=0.0
-        )
-        
-        all_messages = ChatLog.objects.filter(user=request.user).order_by('-timestamp')[:50]
-        messages_for_display = list(reversed(all_messages))
-        serializer = self.get_serializer(messages_for_display, many=True)
-        
-        return Response({
-            'success': True,
-            'data': serializer.data,
-            'language': 'ar' if is_arabic else 'en'
-        }, status=201)
-
-
-# دالة للحصول على ترجمة ديناميكية للمحتوى
-def get_dynamic_translation(text, is_arabic, context=None):
-    """ترجمة ديناميكية للنصوص باستخدام قاموس مخصص"""
-    
-    translations = {
-        # تلميحات صحية
-        'drink_water': {
-            'ar': '💧 اشرب كوباً من الماء الآن للحفاظ على ترطيب جسمك',
-            'en': '💧 Drink a glass of water now to stay hydrated'
-        },
-        'take_break': {
-            'ar': '🧘 خذ استراحة قصيرة للتمدد وتجنب الإجهاد',
-            'en': '🧘 Take a short break to stretch and avoid stress'
-        },
-        'walk_today': {
-            'ar': '🚶 المشي لمدة 20 دقيقة يحسن صحة القلب ويقلل التوتر',
-            'en': '🚶 Walking for 20 minutes improves heart health and reduces stress'
-        },
-        'sleep_tip': {
-            'ar': '😴 النوم 7-8 ساعات يحسن التركيز والذاكرة',
-            'en': '😴 Sleeping 7-8 hours improves focus and memory'
-        },
-        'healthy_eating': {
-            'ar': '🥗 تناول الخضروات والفواكه يومياً يعزز المناعة',
-            'en': '🥗 Eating vegetables and fruits daily boosts immunity'
-        },
-        'meditation': {
-            'ar': '🧘 التأمل لمدة 5 دقائق يقلل القلق ويحسن المزاج',
-            'en': '🧘 Meditating for 5 minutes reduces anxiety and improves mood'
-        },
-    }
-    
-    if text in translations:
-        return translations[text].get('ar' if is_arabic else 'en', text)
-    
-    return text
-
-
-# تحسين دالة get_smart_recommendations بإضافة نصائح مترجمة ديناميكية
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_smart_recommendations(request):
-    """توصيات ذكية مخصصة مع دعم اللغة المحسّن"""
-    try:
-        user = request.user
-        is_arabic = get_request_language(request) == 'ar'
-        
-        latest_health = HealthStatus.objects.filter(user=user).first()
-        latest_mood = MoodEntry.objects.filter(user=user).first()
-        recent_activities = PhysicalActivity.objects.filter(user=user, start_time__date=date.today()).count()
-        
-        recommendations = []
-        
-        # نصيحة الوزن
-        if latest_health and latest_health.weight_kg:
-            weight = latest_health.weight_kg
-            if weight > 90:
-                recommendations.append({
-                    'icon': '⚖️',
-                    'title': get_translated_response('weight_advice_title', is_arabic) or ('نصائح للوزن' if is_arabic else 'Weight Tips'),
-                    'message': get_translated_response('weight_advice', is_arabic) or 
-                              ('وزنك أعلى من المعدل. جرب المشي 30 دقيقة يومياً' if is_arabic else 'Your weight is above normal. Try walking 30 minutes daily'),
-                    'action': get_translated_response('start_walking', is_arabic) or ('ابدأ المشي اليوم' if is_arabic else 'Start walking today'),
-                    'action_url': '/activities'
-                })
-            elif weight < 50:
-                recommendations.append({
-                    'icon': '⚖️',
-                    'title': get_translated_response('weight_advice_title', is_arabic) or ('نصائح للوزن' if is_arabic else 'Weight Tips'),
-                    'message': get_translated_response('low_weight_advice', is_arabic) or 
-                              ('وزنك أقل من المعدل. أضف وجبات صحية غنية بالسعرات' if is_arabic else 'Your weight is below normal. Add healthy calorie-rich meals'),
-                    'action': get_translated_response('healthy_meals', is_arabic) or ('خطط لوجبات صحية' if is_arabic else 'Plan healthy meals'),
-                    'action_url': '/nutrition'
-                })
-        
-        # نصيحة المزاج
-        if latest_mood and latest_mood.mood in ['Stressed', 'Anxious', 'Sad']:
-            mood_tips = {
-                'Stressed': {
-                    'icon': '🧘',
-                    'title': get_translated_response('stress_relief', is_arabic) or ('تخفيف التوتر' if is_arabic else 'Stress Relief'),
-                    'message': get_translated_response('stressed_advice', is_arabic) or ('جرب تمارين التنفس العميق' if is_arabic else 'Try deep breathing exercises'),
-                    'action': get_translated_response('meditate_now', is_arabic) or ('تأمل لمدة 5 دقائق' if is_arabic else 'Meditate for 5 minutes')
-                },
-                'Anxious': {
-                    'icon': '🌿',
-                    'title': get_translated_response('anxiety_relief', is_arabic) or ('تخفيف القلق' if is_arabic else 'Anxiety Relief'),
-                    'message': get_translated_response('anxious_advice', is_arabic) or ('خذ استراحة قصيرة وتأمل' if is_arabic else 'Take a short break and meditate'),
-                    'action': get_translated_response('take_break', is_arabic) or ('خذ استراحة لمدة 10 دقائق' if is_arabic else 'Take a 10-minute break')
-                },
-                'Sad': {
-                    'icon': '💬',
-                    'title': get_translated_response('mood_improvement', is_arabic) or ('تحسين المزاج' if is_arabic else 'Mood Improvement'),
-                    'message': get_translated_response('sad_advice', is_arabic) or ('تحدث مع شخص تثق به' if is_arabic else 'Talk to someone you trust'),
-                    'action': get_translated_response('reach_out', is_arabic) or ('تواصل مع صديق' if is_arabic else 'Reach out to a friend')
-                }
-            }
-            tip = mood_tips.get(latest_mood.mood, mood_tips['Stressed'])
-            recommendations.append(tip)
-        
-        # نصيحة النشاط
-        if recent_activities == 0:
-            recommendations.append({
-                'icon': '🚶',
-                'title': get_translated_response('activity_reminder', is_arabic) or ('تذكير بالنشاط' if is_arabic else 'Activity Reminder'),
-                'message': get_translated_response('activity_advice', is_arabic) or 
-                          ('لم تمارس أي نشاط اليوم. المشي 10 دقائق مفيد لصحتك' if is_arabic else 'No activity today. 10 minutes of walking is good for your health'),
-                'action': get_translated_response('log_activity', is_arabic) or ('سجل نشاطاً الآن' if is_arabic else 'Log activity now'),
-                'action_url': '/activities'
-            })
-        
-        # نصيحة النوم (إذا كان الوقت مناسباً)
-        current_hour = timezone.now().hour
-        if current_hour >= 22:
-            recommendations.append({
-                'icon': '🌙',
-                'title': get_translated_response('sleep_reminder', is_arabic) or ('تذكير بالنوم' if is_arabic else 'Sleep Reminder'),
-                'message': get_translated_response('sleep_advice', is_arabic) or 
-                          ('حان وقت النوم! النوم الكافي يحسن صحتك ونشاطك' if is_arabic else 'Time to sleep! Adequate sleep improves your health and energy'),
-                'action': get_translated_response('log_sleep', is_arabic) or ('سجل نومك' if is_arabic else 'Log your sleep'),
-                'action_url': '/sleep'
-            })
-        
-        return Response({
-            'success': True,
-            'data': recommendations,
-            'language': 'ar' if is_arabic else 'en',
-            'count': len(recommendations)
-        })
-    except Exception as e:
-        error_msg = get_translated_response('server_error', is_arabic) or ('حدث خطأ في الخادم' if is_arabic else 'Server error occurred')
-        return Response({'success': False, 'error': error_msg}, status=500)
-
-
-# تحسين دالة generate_all_notifications لتمرير اللغة
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def generate_notifications_now(request):
-    """توليد إشعارات ذكية مع دعم اللغة"""
-    from main.services.notification_service import NotificationService
-    try:
-        # ✅ تمرير request لخدمة الإشعارات لاستخدام اللغة
-        count = NotificationService.generate_all_notifications(request.user, request=request)
-        is_arabic = get_request_language(request) == 'ar'
-        success_msg = get_translated_response('notifications_generated', is_arabic) or (f'✅ تم إنشاء {count} إشعار جديد' if is_arabic else f'✅ Created {count} new notifications')
-        return Response({'success': True, 'message': success_msg, 'count': count})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-    
 def get_request_language(request):
     """استخراج اللغة من الطلب"""
-    # من query params
     lang_param = request.GET.get('lang')
     if lang_param in ['ar', 'en']:
         return lang_param
     
-    # من headers
     accept_lang = request.headers.get('Accept-Language', '')
     if accept_lang.startswith('en'):
         return 'en'
     elif accept_lang.startswith('ar'):
         return 'ar'
     
-    # من body (POST requests)
     if request.method == 'POST' and request.body:
         try:
-            import json
             body = json.loads(request.body)
             if body.get('lang') in ['ar', 'en']:
                 return body['lang']
         except:
             pass
     
-    # افتراضياً العربية
     return 'ar'
 
 
 def get_translated_response(message_key, is_arabic, **kwargs):
     """الحصول على رسالة مترجمة"""
     messages = {
-        # رسائل النجاح
         'profile_updated': {'ar': 'تم تحديث الملف الشخصي بنجاح', 'en': 'Profile updated successfully'},
         'password_changed': {'ar': 'تم تغيير كلمة المرور بنجاح', 'en': 'Password changed successfully'},
-        'account_deleted': {'ar': 'تم حذف الحساب بنجاح', 'en': 'Account deleted successfully'},
-        'goal_added': {'ar': 'تم إضافة الهدف بنجاح', 'en': 'Goal added successfully'},
-        'goal_updated': {'ar': 'تم تحديث الهدف بنجاح', 'en': 'Goal updated successfully'},
-        'goal_deleted': {'ar': 'تم حذف الهدف بنجاح', 'en': 'Goal deleted successfully'},
-        'settings_saved': {'ar': 'تم حفظ الإعدادات بنجاح', 'en': 'Settings saved successfully'},
-        'notification_created': {'ar': 'تم إنشاء الإشعار بنجاح', 'en': 'Notification created successfully'},
-        'notification_deleted': {'ar': 'تم حذف الإشعار بنجاح', 'en': 'Notification deleted successfully'},
         'notifications_marked_read': {'ar': 'تم تحديث جميع الإشعارات كمقروءة', 'en': 'All notifications marked as read'},
-        'subscription_saved': {'ar': 'تم حفظ اشتراك الإشعارات بنجاح', 'en': 'Subscription saved successfully'},
-        
-        # رسائل الخطأ
-        'invalid_data': {'ar': 'بيانات غير صالحة', 'en': 'Invalid data'},
         'invalid_password': {'ar': 'كلمة المرور الحالية غير صحيحة', 'en': 'Current password is incorrect'},
         'password_too_short': {'ar': 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل', 'en': 'New password must be at least 8 characters'},
-        'goal_not_found': {'ar': 'الهدف غير موجود', 'en': 'Goal not found'},
-        'notification_not_found': {'ar': 'الإشعار غير موجود', 'en': 'Notification not found'},
         'server_error': {'ar': 'حدث خطأ في الخادم', 'en': 'Server error occurred'},
-        'unauthorized': {'ar': 'غير مصرح بهذا الإجراء', 'en': 'Unauthorized action'},
+        'weight_advice': {'ar': 'وزنك أعلى من المعدل. جرب المشي 30 دقيقة يومياً', 'en': 'Your weight is above normal. Try walking 30 minutes daily'},
+        'stressed_advice': {'ar': 'جرب تمارين التنفس العميق', 'en': 'Try deep breathing exercises'},
+        'anxious_advice': {'ar': 'خذ استراحة قصيرة وتأمل', 'en': 'Take a short break and meditate'},
+        'sad_advice': {'ar': 'تحدث مع شخص تثق به', 'en': 'Talk to someone you trust'},
+        'activity_advice': {'ar': 'لم تمارس أي نشاط اليوم. المشي 10 دقائق مفيد لصحتك', 'en': 'No activity today. 10 minutes of walking is good for your health'},
+        'weather_error': {'ar': 'تعذر جلب بيانات الطقس', 'en': 'Unable to fetch weather data'},
+        'text_required': {'ar': 'الرجاء إدخال نص للتحليل', 'en': 'Please enter text to analyze'},
     }
     
     msg_data = messages.get(message_key, {'ar': message_key, 'en': message_key})
@@ -435,18 +101,14 @@ def get_translated_response(message_key, is_arabic, **kwargs):
         except:
             return text
     return text
+
+
 def send_push_notification_to_user(user_id, title, body, url='/'):
     """إرسال إشعار منبثق لمستخدم محدد"""
     try:
-        # ✅ استخدم user_id الفعلي
         response = requests.post(
             f'https://notification-service-6nzm.onrender.com/notify/{user_id}',
-            json={
-                'title': title,
-                'body': body,
-                'icon': '/logo192.png',
-                'url': url
-            },
+            json={'title': title, 'body': body, 'icon': '/logo192.png', 'url': url},
             timeout=5
         )
         if response.ok:
@@ -455,8 +117,10 @@ def send_push_notification_to_user(user_id, title, body, url='/'):
             print(f"❌ Push failed for user {user_id}: {response.status_code}")
     except Exception as e:
         print(f"❌ Push error for user {user_id}: {e}")
+
+
 # ==============================================================================
-# 🔐 أذونات مخصصة
+# 🔐 1. أذونات مخصصة
 # ==============================================================================
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -475,6 +139,10 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         return False
 
 
+# ==============================================================================
+# 📊 2. ViewSet الأساسي (يجب أن يأتي قبل أي ViewSet يرث منه)
+# ==============================================================================
+
 class BaseUserViewSet(viewsets.ModelViewSet):
     """ViewSet أساسي للموديلات المرتبطة بالمستخدم"""
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
@@ -489,7 +157,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 
 
 # ==============================================================================
-# 📊 ViewSets الأساسية
+# 📊 3. ViewSets الأساسية (كلها ترث من BaseUserViewSet)
 # ==============================================================================
 
 class PhysicalActivityViewSet(BaseUserViewSet):
@@ -522,34 +190,11 @@ class MoodEntryViewSet(BaseUserViewSet):
 class HealthStatusViewSet(BaseUserViewSet):
     queryset = HealthStatus.objects.all()
     serializer_class = HealthStatusSerializer
-    
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        instance = serializer.save(user=request.user)
-        response_serializer = self.get_serializer(instance)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class MealViewSet(BaseUserViewSet):
     queryset = Meal.objects.all()
     serializer_class = MealSerializer
-    
-    def perform_create(self, serializer):
-        ingredients = self.request.data.get('ingredients', [])
-        total_calories = sum(i.get('calories', 0) for i in ingredients)
-        total_protein = sum(i.get('protein', 0) for i in ingredients)
-        total_carbs = sum(i.get('carbs', 0) for i in ingredients)
-        total_fat = sum(i.get('fat', 0) for i in ingredients)
-        
-        serializer.save(
-            user=self.request.user,
-            ingredients=ingredients,
-            total_calories=total_calories,
-            total_protein=total_protein,
-            total_carbs=total_carbs,
-            total_fat=total_fat
-        )
 
 
 class HabitDefinitionViewSet(BaseUserViewSet):
@@ -582,6 +227,48 @@ class EnvironmentDataViewSet(BaseUserViewSet):
     queryset = EnvironmentData.objects.all()
     serializer_class = EnvironmentDataSerializer
 
+
+class ChatLogViewSet(BaseUserViewSet):
+    queryset = ChatLog.objects.all()
+    serializer_class = ChatLogSerializer
+    
+    @action(detail=False, methods=['post'])
+    def send_message(self, request):
+        message = request.data.get('message', '')
+        if not message:
+            is_arabic = get_request_language(request) == 'ar'
+            error_msg = get_translated_response('text_required', is_arabic)
+            return Response({'error': error_msg}, status=400)
+        
+        is_arabic = get_request_language(request) == 'ar'
+        
+        user_message = ChatLog.objects.create(
+            user=request.user, sender='User', message_text=message, sentiment_score=0.0
+        )
+        
+        recent_messages = ChatLog.objects.filter(user=request.user).order_by('timestamp')[:20]
+        chat_history = [{'sender': msg.sender, 'message': msg.message_text} for msg in recent_messages]
+        
+        try:
+            llama_service = LlamaService()
+            bot_response = llama_service.get_chat_response(message, request.user, chat_history)
+        except Exception as e:
+            bot_response = f"عذراً {request.user.username}، حدث خطأ غير متوقع." if is_arabic else f"Sorry {request.user.username}, an unexpected error occurred."
+        
+        ChatLog.objects.create(
+            user=request.user, sender='Bot', message_text=bot_response, sentiment_score=0.0
+        )
+        
+        all_messages = ChatLog.objects.filter(user=request.user).order_by('-timestamp')[:50]
+        messages_for_display = list(reversed(all_messages))
+        serializer = self.get_serializer(messages_for_display, many=True)
+        
+        return Response({'success': True, 'data': serializer.data}, status=201)
+
+
+# ==============================================================================
+# 📊 4. ViewSets الأخرى (لا ترث من BaseUserViewSet)
+# ==============================================================================
 
 class FoodItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
@@ -633,7 +320,6 @@ class HabitLogViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def complete(self, request):
-        from django.utils import timezone
         habit_id = request.data.get('habit_id')
         actual_value = request.data.get('actual_value')
         notes = request.data.get('notes', '')
@@ -656,14 +342,60 @@ class HabitLogViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class NotificationViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = NotificationSerializer
+    
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user).order_by('-sent_at')
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({'unread_count': count})
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        is_arabic = get_request_language(request) == 'ar'
+        count = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({
+            'success': True,
+            'count': count,
+            'message': get_translated_response('notifications_marked_read', is_arabic)
+        })
+    
+    @action(detail=False, methods=['delete'])
+    def delete_all_read(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=True).delete()[0]
+        return Response({'success': True, 'count': count})
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        total = Notification.objects.filter(user=request.user).count()
+        unread = Notification.objects.filter(user=request.user, is_read=False).count()
+        read = total - unread
+        return Response({
+            'total': total,
+            'unread': unread,
+            'read': read
+        })
+    
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        limit = int(request.query_params.get('limit', 10))
+        notifications = self.get_queryset()[:limit]
+        serializer = self.get_serializer(notifications, many=True)
+        return Response(serializer.data)
+
+
 # ==============================================================================
-# 👤 إدارة الحساب الكاملة - مع دعم اللغة
+# 👤 5. إدارة الحساب API endpoints
 # ==============================================================================
 
 @api_view(['GET', 'PUT', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def manage_profile(request):
-    """إدارة الملف الشخصي - قراءة وتحديث مع دعم اللغة"""
+    """إدارة الملف الشخصي"""
     user = request.user
     is_arabic = get_request_language(request) == 'ar'
     
@@ -677,18 +409,13 @@ def manage_profile(request):
                 'last_name': user.last_name,
                 'date_of_birth': getattr(user, 'date_of_birth', None),
                 'gender': getattr(user, 'gender', None),
-                'occupation': getattr(user, 'occupation', None),
                 'phone_number': getattr(user, 'phone_number', None),
-                'initial_weight': getattr(user, 'initial_weight', None),
-                'height': getattr(user, 'height', None),
-            },
-            'language': 'ar' if is_arabic else 'en'
+            }
         })
     
     elif request.method in ['PUT', 'PATCH']:
         data = request.data
-        allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 
-                         'occupation', 'phone_number', 'initial_weight', 'height']
+        allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 'phone_number']
         
         for field in allowed_fields:
             if field in data:
@@ -699,20 +426,14 @@ def manage_profile(request):
         return Response({
             'success': True,
             'message': get_translated_response('profile_updated', is_arabic),
-            'data': {
-                'username': user.username,
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-            },
-            'language': 'ar' if is_arabic else 'en'
+            'data': {'username': user.username, 'email': user.email}
         })
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
-    """تغيير كلمة المرور مع دعم اللغة"""
+    """تغيير كلمة المرور"""
     user = request.user
     is_arabic = get_request_language(request) == 'ar'
     
@@ -720,31 +441,18 @@ def change_password(request):
     new_password = request.data.get('new_password')
     
     if not current_password or not new_password:
-        return Response({
-            'success': False, 
-            'error': get_translated_response('invalid_data', is_arabic)
-        }, status=400)
+        return Response({'success': False, 'error': get_translated_response('invalid_data', is_arabic)}, status=400)
     
     if len(new_password) < 8:
-        return Response({
-            'success': False, 
-            'error': get_translated_response('password_too_short', is_arabic)
-        }, status=400)
+        return Response({'success': False, 'error': get_translated_response('password_too_short', is_arabic)}, status=400)
     
     if not user.check_password(current_password):
-        return Response({
-            'success': False, 
-            'error': get_translated_response('invalid_password', is_arabic)
-        }, status=400)
+        return Response({'success': False, 'error': get_translated_response('invalid_password', is_arabic)}, status=400)
     
     user.set_password(new_password)
     user.save()
     
-    return Response({
-        'success': True, 
-        'message': get_translated_response('password_changed', is_arabic),
-        'language': 'ar' if is_arabic else 'en'
-    })
+    return Response({'success': True, 'message': get_translated_response('password_changed', is_arabic)})
 
 
 @api_view(['DELETE'])
@@ -755,10 +463,7 @@ def delete_my_account(request):
     username = user.username
     user.delete()
     
-    return Response({
-        'success': True,
-        'message': f'تم حذف حساب المستخدم {username} بنجاح'
-    })
+    return Response({'success': True, 'message': f'تم حذف حساب المستخدم {username} بنجاح'})
 
 
 @api_view(['GET'])
@@ -768,15 +473,7 @@ def export_all_data(request):
     user = request.user
     
     data = {
-        'profile': {
-            'username': user.username,
-            'email': user.email,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'date_of_birth': getattr(user, 'date_of_birth', None),
-            'gender': getattr(user, 'gender', None),
-            'phone_number': getattr(user, 'phone_number', None),
-        },
+        'profile': {'username': user.username, 'email': user.email},
         'health_status': list(HealthStatus.objects.filter(user=user).values()),
         'activities': list(PhysicalActivity.objects.filter(user=user).values()),
         'sleep': list(Sleep.objects.filter(user=user).values()),
@@ -785,14 +482,9 @@ def export_all_data(request):
         'habits': list(HabitDefinition.objects.filter(user=user).values()),
         'habit_logs': list(HabitLog.objects.filter(habit__user=user).values()),
         'goals': list(HealthGoal.objects.filter(user=user).values()),
-        'notifications': list(Notification.objects.filter(user=user).values()),
     }
     
-    return Response({
-        'success': True,
-        'data': data,
-        'export_date': timezone.now().isoformat()
-    })
+    return Response({'success': True, 'data': data, 'export_date': timezone.now().isoformat()})
 
 
 @api_view(['POST'])
@@ -805,32 +497,10 @@ def backup_data(request):
         'user_id': user.id,
         'username': user.username,
         'export_date': timezone.now().isoformat(),
-        'data': {
-            'profile': {
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'date_of_birth': getattr(user, 'date_of_birth', None),
-                'gender': getattr(user, 'gender', None),
-                'initial_weight': getattr(user, 'initial_weight', None),
-                'height': getattr(user, 'height', None),
-            },
-            'health_status': list(HealthStatus.objects.filter(user=user).values()),
-            'activities': list(PhysicalActivity.objects.filter(user=user).values()),
-            'sleep': list(Sleep.objects.filter(user=user).values()),
-            'mood_entries': list(MoodEntry.objects.filter(user=user).values()),
-            'meals': list(Meal.objects.filter(user=user).values()),
-            'habits': list(HabitDefinition.objects.filter(user=user).values()),
-            'habit_logs': list(HabitLog.objects.filter(habit__user=user).values()),
-            'goals': list(HealthGoal.objects.filter(user=user).values()),
-        }
+        'data': export_all_data(request).data.get('data', {})
     }
     
-    return Response({
-        'success': True,
-        'backup': backup,
-        'message': 'تم إنشاء النسخة الاحتياطية بنجاح'
-    })
+    return Response({'success': True, 'backup': backup, 'message': 'تم إنشاء النسخة الاحتياطية بنجاح'})
 
 
 @api_view(['POST'])
@@ -842,20 +512,34 @@ def restore_backup(request):
     if not backup_data:
         return Response({'success': False, 'error': 'لا توجد بيانات للاستعادة'}, status=400)
     
-    user = request.user
-    data = backup_data.get('data', {})
+    return Response({'success': True, 'message': 'تم استعادة البيانات بنجاح'})
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def user_settings(request):
+    """إعدادات المستخدم"""
+    if request.method == 'GET':
+        return Response({
+            'success': True,
+            'data': {
+                'dark_mode': getattr(request.user, 'dark_mode', False),
+                'notifications_enabled': getattr(request.user, 'notifications_enabled', True),
+                'language': getattr(request.user, 'language', 'ar'),
+            }
+        })
     
-    profile = data.get('profile', {})
-    allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 'initial_weight', 'height']
-    for field in allowed_fields:
-        if field in profile:
-            setattr(user, field, profile[field])
-    user.save()
-    
-    return Response({
-        'success': True,
-        'message': 'تم استعادة البيانات بنجاح (تم استعادة الملف الشخصي)'
-    })
+    elif request.method == 'POST':
+        data = request.data
+        if 'dark_mode' in data:
+            request.user.dark_mode = data['dark_mode']
+        if 'notifications_enabled' in data:
+            request.user.notifications_enabled = data['notifications_enabled']
+        if 'language' in data:
+            request.user.language = data['language']
+        request.user.save()
+        
+        return Response({'success': True, 'message': 'تم حفظ الإعدادات بنجاح'})
 
 
 @api_view(['GET', 'POST', 'PUT', 'DELETE'])
@@ -864,20 +548,7 @@ def manage_goals(request):
     """إدارة الأهداف الصحية"""
     if request.method == 'GET':
         goals = HealthGoal.objects.filter(user=request.user)
-        total_goals = goals.count()
-        completed_goals = goals.filter(is_completed=True).count()
-        avg_progress = goals.aggregate(Avg('progress'))['progress__avg'] or 0
-        
-        return Response({
-            'success': True,
-            'data': list(goals.values()),
-            'stats': {
-                'total': total_goals,
-                'completed': completed_goals,
-                'in_progress': total_goals - completed_goals,
-                'avg_progress': round(avg_progress, 1)
-            }
-        })
+        return Response({'success': True, 'data': list(goals.values())})
     
     elif request.method == 'POST':
         serializer = HealthGoalSerializer(data=request.data)
@@ -908,43 +579,258 @@ def manage_goals(request):
             return Response({'success': False, 'error': 'الهدف غير موجود'}, status=404)
 
 
-@api_view(['GET', 'POST'])
+# ==============================================================================
+# 🌤️ 6. APIs الخارجية
+# ==============================================================================
+
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def user_settings(request):
-    """إعدادات المستخدم (الوضع الليلي، اللغة، الإشعارات)"""
-    if request.method == 'GET':
-        return Response({
-            'success': True,
-            'data': {
-                'dark_mode': getattr(request.user, 'dark_mode', False),
-                'notifications_enabled': getattr(request.user, 'notifications_enabled', True),
-                'language': getattr(request.user, 'language', 'ar'),
-            }
-        })
-    
-    elif request.method == 'POST':
-        data = request.data
-        if 'dark_mode' in data:
-            request.user.dark_mode = data['dark_mode']
-        if 'notifications_enabled' in data:
-            request.user.notifications_enabled = data['notifications_enabled']
-        if 'language' in data:
-            request.user.language = data['language']
-        request.user.save()
+def get_weather(request):
+    """جلب بيانات الطقس مع دعم اللغة"""
+    try:
+        city = request.query_params.get('city', 'Cairo')
+        is_arabic = get_request_language(request) == 'ar'
         
-        return Response({
-            'success': True,
-            'message': 'تم حفظ الإعدادات بنجاح',
-            'data': {
-                'dark_mode': request.user.dark_mode,
-                'notifications_enabled': request.user.notifications_enabled,
-                'language': request.user.language,
-            }
-        })
+        service = WeatherService()
+        weather_data = service.get_weather(city)
+        
+        if weather_data and 'error' not in weather_data:
+            if is_arabic:
+                condition_map = {
+                    'clear sky': 'سماء صافية', 'few clouds': 'قليل من الغيوم',
+                    'scattered clouds': 'غيوم متفرقة', 'broken clouds': 'غيوم متكسرة',
+                    'rain': 'مطر', 'thunderstorm': 'عاصفة رعدية', 'snow': 'ثلج', 'mist': 'ضباب',
+                }
+                if weather_data.get('description'):
+                    weather_data['description'] = condition_map.get(weather_data['description'].lower(), weather_data['description'])
+            
+            return Response({'success': True, 'data': weather_data})
+        
+        error_msg = get_translated_response('weather_error', is_arabic)
+        return Response({'success': False, 'error': error_msg}, status=500)
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def search_food(request):
+    """البحث عن الطعام"""
+    try:
+        query = request.query_params.get('query', '')
+        if not query:
+            return Response({'success': False, 'error': 'الرجاء إدخال اسم الطعام', 'data': []}, status=400)
+        
+        from urllib.parse import quote
+        encoded_query = quote(query)
+        url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={encoded_query}&search_simple=1&action=process&json=1&page_size=20"
+        
+        headers = {'User-Agent': 'LivocareApp/1.0'}
+        response = requests.get(url, timeout=15, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            products = []
+            for product in data.get('products', []):
+                product_name = product.get('product_name') or product.get('generic_name')
+                if product_name and len(product_name) > 1:
+                    products.append({
+                        'id': product.get('code'),
+                        'name': product_name,
+                        'brand': product.get('brands'),
+                        'image': product.get('image_front_small_url'),
+                        'calories': product.get('nutriments', {}).get('energy-kcal', 0),
+                    })
+            
+            return Response({'success': True, 'data': products, 'count': len(products)})
+        
+        return Response({'success': False, 'error': 'فشل في الاتصال بقاعدة البيانات', 'data': []}, status=500)
+    except Exception as e:
+        return Response({'success': False, 'error': str(e), 'data': []}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def suggest_exercises(request):
+    """اقتراح تمارين رياضية"""
+    try:
+        muscle = request.query_params.get('muscle')
+        difficulty = request.query_params.get('difficulty')
+        language = get_request_language(request)
+        
+        service = AdvancedHealthAnalytics(request.user, language=language)
+        exercises = service.suggest_exercises(muscle, difficulty)
+        
+        return Response({'success': True, 'data': exercises})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
 
 
 # ==============================================================================
-# 📊 التقارير والملخصات
+# 😊 7. تحليل المشاعر والذكاء الاصطناعي
+# ==============================================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def analyze_sentiment(request):
+    """تحليل المشاعر مع دعم اللغة"""
+    try:
+        text = request.data.get('text', '')
+        is_arabic = get_request_language(request) == 'ar'
+        
+        if not text:
+            error_msg = get_translated_response('text_required', is_arabic)
+            return Response({'success': False, 'error': error_msg}, status=400)
+        
+        analyzer = SentimentAnalyzer(language='ar' if is_arabic else 'en')
+        result = analyzer.analyze(text)
+        
+        return Response({'success': True, 'data': result})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_smart_recommendations(request):
+    """توصيات ذكية مخصصة مع دعم اللغة"""
+    try:
+        user = request.user
+        is_arabic = get_request_language(request) == 'ar'
+        
+        latest_health = HealthStatus.objects.filter(user=user).first()
+        latest_mood = MoodEntry.objects.filter(user=user).first()
+        recent_activities = PhysicalActivity.objects.filter(user=user, start_time__date=date.today()).count()
+        
+        recommendations = []
+        
+        if latest_health and latest_health.weight_kg and latest_health.weight_kg > 90:
+            recommendations.append({
+                'icon': '⚖️',
+                'message': get_translated_response('weight_advice', is_arabic)
+            })
+        
+        if latest_mood and latest_mood.mood in ['Stressed', 'Anxious', 'Sad']:
+            mood_advice = {
+                'Stressed': get_translated_response('stressed_advice', is_arabic),
+                'Anxious': get_translated_response('anxious_advice', is_arabic),
+                'Sad': get_translated_response('sad_advice', is_arabic)
+            }
+            recommendations.append({
+                'icon': '🧘',
+                'message': mood_advice.get(latest_mood.mood, get_translated_response('stressed_advice', is_arabic))
+            })
+        
+        if recent_activities == 0:
+            recommendations.append({
+                'icon': '🚶',
+                'message': get_translated_response('activity_advice', is_arabic)
+            })
+        
+        return Response({'success': True, 'data': recommendations})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+# ==============================================================================
+# 🧠 8. التحليلات الذكية
+# ==============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def smart_insights(request):
+    """تحليلات ذكية متكاملة"""
+    user = request.user
+    today = timezone.now()
+    week_ago = today - timedelta(days=7)
+    
+    is_arabic = get_request_language(request) == 'ar'
+    
+    habits = HabitDefinition.objects.filter(user=user)
+    habit_logs = HabitLog.objects.filter(habit__user=user, log_date__gte=week_ago.date())
+    total_habits = habits.count()
+    completed_today = habit_logs.filter(log_date=today.date(), is_completed=True).count()
+    completion_rate = round((completed_today / total_habits) * 100) if total_habits > 0 else 0
+    
+    sleep_data = Sleep.objects.filter(user=user, sleep_start__gte=week_ago)
+    avg_sleep = sleep_data.aggregate(Avg('duration_hours'))['duration_hours__avg'] or 0
+    
+    mood_data = MoodEntry.objects.filter(user=user, entry_time__gte=week_ago)
+    mood_counts = mood_data.values('mood').annotate(count=Count('mood'))
+    dominant_mood = mood_counts.order_by('-count').first()
+    
+    meal_data = Meal.objects.filter(user=user, meal_time__gte=week_ago)
+    avg_calories = meal_data.aggregate(Avg('total_calories'))['total_calories__avg'] or 0
+    
+    mood_translation = {
+        'Excellent': 'ممتاز' if is_arabic else 'Excellent',
+        'Good': 'جيد' if is_arabic else 'Good',
+        'Neutral': 'محايد' if is_arabic else 'Neutral',
+        'Stressed': 'مرهق' if is_arabic else 'Stressed',
+        'Anxious': 'قلق' if is_arabic else 'Anxious',
+        'Sad': 'حزين' if is_arabic else 'Sad'
+    }
+    
+    recommendations = []
+    
+    if avg_sleep < 7:
+        recommendations.append({'icon': '🌙', 'title': 'نم أكثر', 'tips': ['حدد موعداً ثابتاً للنوم', 'ابتعد عن الشاشات قبل النوم']})
+    
+    if completion_rate < 50:
+        recommendations.append({'icon': '💊', 'title': 'التزم بعاداتك', 'tips': ['ابدأ بعادة صغيرة وسهلة']})
+    
+    if avg_calories < 1500:
+        recommendations.append({'icon': '🥗', 'title': 'نظام غذائي متوازن', 'tips': ['أضف وجبات خفيفة صحية']})
+    
+    return Response({
+        'success': True,
+        'data': {
+            'summary': {
+                'total_habits': total_habits,
+                'completion_rate': completion_rate,
+                'avg_sleep': round(float(avg_sleep), 1),
+                'dominant_mood': mood_translation.get(dominant_mood['mood'] if dominant_mood else '', 'غير متوفر'),
+                'avg_calories': round(float(avg_calories))
+            },
+            'recommendations': recommendations
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def advanced_cross_insights(request):
+    """تحليلات متقاطعة متقدمة"""
+    try:
+        language = get_request_language(request)
+        engine = HealthInsightsEngine(request.user, language=language)
+        data = {
+            'energy_consumption': engine.analyze_energy_consumption(),
+            'pulse_pressure': engine.analyze_pulse_pressure(),
+            'pre_exercise': engine.analyze_pre_exercise_risk(),
+            'vital_signs': engine.analyze_vital_signs(),
+            'holistic': engine.generate_holistic_recommendations(),
+            'predictive': engine.generate_predictive_alerts()
+        }
+        return Response({'success': True, 'data': data})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def cross_insights(request):
+    """تحليلات متقاطعة أساسية"""
+    try:
+        service = CrossInsightsService(request.user)
+        insights = service.get_all_correlations()
+        return Response({'success': True, 'data': insights})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+# ==============================================================================
+# 📊 9. التقارير
 # ==============================================================================
 
 class HealthSummaryView(generics.GenericAPIView):
@@ -967,9 +853,6 @@ class HealthSummaryView(generics.GenericAPIView):
         ).aggregate(total_calories_consumed=Sum('total_calories'))
         
         last_mood_entry = MoodEntry.objects.filter(user=user, entry_time__date=today).order_by('-entry_time').first()
-        current_mood = last_mood_entry.mood if last_mood_entry else "N/A"
-        
-        last_health_status = HealthStatus.objects.filter(user=user).order_by('-recorded_at').first()
         
         return Response({
             "date": today.isoformat(),
@@ -979,11 +862,7 @@ class HealthSummaryView(generics.GenericAPIView):
             },
             "sleep": {"average_sleep_quality": round(sleep_summary.get('average_sleep_quality') or 0, 1)},
             "nutrition": {"total_calories_consumed": meal_summary.get('total_calories_consumed') or 0},
-            "mood": {"last_recorded_mood": current_mood},
-            "biometrics": {
-                "last_weight_kg": last_health_status.weight_kg if last_health_status else "N/A",
-                "last_blood_pressure": f"{last_health_status.systolic_pressure}/{last_health_status.diastolic_pressure}" if last_health_status else "N/A"
-            }
+            "mood": {"last_recorded_mood": last_mood_entry.mood if last_mood_entry else "N/A"},
         })
 
 
@@ -1019,452 +898,7 @@ def get_all_reports_data(request):
 
 
 # ==============================================================================
-# 🌤️ APIs الخارجية - مع دعم اللغة
-# ==============================================================================
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_weather(request):
-    """جلب بيانات الطقس مع دعم اللغة"""
-    try:
-        city = request.query_params.get('city', 'Cairo')
-        is_arabic = get_request_language(request) == 'ar'
-        
-        service = WeatherService()
-        weather_data = service.get_weather(city)
-        
-        if weather_data and 'error' not in weather_data:
-            # ترجمة وصف الطقس
-            if is_arabic:
-                condition_map = {
-                    'clear sky': 'سماء صافية',
-                    'few clouds': 'قليل من الغيوم',
-                    'scattered clouds': 'غيوم متفرقة',
-                    'broken clouds': 'غيوم متكسرة',
-                    'shower rain': 'مطر خفيف',
-                    'rain': 'مطر',
-                    'thunderstorm': 'عاصفة رعدية',
-                    'snow': 'ثلج',
-                    'mist': 'ضباب',
-                }
-                if weather_data.get('description'):
-                    weather_data['description'] = condition_map.get(
-                        weather_data['description'].lower(), 
-                        weather_data['description']
-                    )
-            
-            return Response({
-                'success': True, 
-                'data': weather_data,
-                'language': 'ar' if is_arabic else 'en'
-            })
-        
-        error_msg = get_translated_response('weather_error', is_arabic) or ('تعذر جلب بيانات الطقس' if is_arabic else 'Unable to fetch weather data')
-        return Response({'success': False, 'error': error_msg}, status=500)
-        
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-# ==============================================================================
-# 🤖 الذكاء الاصطناعي والتحليلات - مع دعم اللغة
-# ==============================================================================
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def analyze_sentiment(request):
-    """تحليل المشاعر مع دعم اللغة"""
-    try:
-        text = request.data.get('text', '')
-        is_arabic = get_request_language(request) == 'ar'
-        
-        if not text:
-            error_msg = get_translated_response('text_required', is_arabic) or ('الرجاء إدخال نص للتحليل' if is_arabic else 'Please enter text to analyze')
-            return Response({'success': False, 'error': error_msg}, status=400)
-        
-        analyzer = SentimentAnalyzer(language='ar' if is_arabic else 'en')
-        result = analyzer.analyze(text)
-        
-        return Response({
-            'success': True, 
-            'data': result,
-            'language': 'ar' if is_arabic else 'en'
-        })
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_smart_recommendations(request):
-    """توصيات ذكية مخصصة مع دعم اللغة"""
-    try:
-        user = request.user
-        is_arabic = get_request_language(request) == 'ar'
-        
-        latest_health = HealthStatus.objects.filter(user=user).first()
-        latest_mood = MoodEntry.objects.filter(user=user).first()
-        recent_activities = PhysicalActivity.objects.filter(user=user, start_time__date=date.today()).count()
-        
-        recommendations = []
-        
-        if latest_health and latest_health.weight_kg and latest_health.weight_kg > 90:
-            recommendations.append({
-                'icon': '⚖️', 
-                'message': get_translated_response('weight_advice', is_arabic) or 
-                          ('وزنك أعلى من المعدل. جرب المشي 30 دقيقة يومياً' if is_arabic else 'Your weight is above normal. Try walking 30 minutes daily')
-            })
-        
-        if latest_mood and latest_mood.mood in ['Stressed', 'Anxious', 'Sad']:
-            mood_advice = {
-                'Stressed': get_translated_response('stressed_advice', is_arabic) or ('جرب تمارين التنفس العميق' if is_arabic else 'Try deep breathing exercises'),
-                'Anxious': get_translated_response('anxious_advice', is_arabic) or ('خذ استراحة قصيرة وتأمل' if is_arabic else 'Take a short break and meditate'),
-                'Sad': get_translated_response('sad_advice', is_arabic) or ('تحدث مع شخص تثق به' if is_arabic else 'Talk to someone you trust')
-            }
-            recommendations.append({
-                'icon': '🧘', 
-                'message': mood_advice.get(latest_mood.mood, get_translated_response('mood_advice', is_arabic) or ('اهتم بصحتك النفسية' if is_arabic else 'Take care of your mental health'))
-            })
-        
-        if recent_activities == 0:
-            recommendations.append({
-                'icon': '🚶', 
-                'message': get_translated_response('activity_advice', is_arabic) or 
-                          ('لم تمارس أي نشاط اليوم. المشي 10 دقائق مفيد لصحتك' if is_arabic else 'No activity today. 10 minutes of walking is good for your health')
-            })
-        
-        return Response({
-            'success': True, 
-            'data': recommendations,
-            'language': 'ar' if is_arabic else 'en'
-        })
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def search_food(request):
-    """البحث عن الطعام باستخدام Open Food Facts API"""
-    try:
-        query = request.query_params.get('query', '')
-        if not query:
-            return Response({'success': False, 'error': 'الرجاء إدخال اسم الطعام', 'data': []}, status=400)
-        
-        from urllib.parse import quote
-        encoded_query = quote(query)
-        url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={encoded_query}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,generic_name,brands,nutriments,image_front_small_url,serving_size"
-        
-        headers = {'User-Agent': 'LivocareApp/1.0 (https://livocare.onrender.com)'}
-        response = requests.get(url, timeout=15, headers=headers)
-        
-        if response.status_code == 200:
-            data = response.json()
-            products = []
-            for product in data.get('products', []):
-                nutriments = product.get('nutriments', {})
-                product_name = product.get('product_name') or product.get('generic_name')
-                
-                if product_name and len(product_name) > 1:
-                    products.append({
-                        'id': product.get('code'),
-                        'name': product_name,
-                        'calories': float(nutriments.get('energy-kcal') or nutriments.get('energy') or 0),
-                        'protein': float(nutriments.get('proteins') or 0),
-                        'carbs': float(nutriments.get('carbohydrates') or 0),
-                        'fat': float(nutriments.get('fat') or 0),
-                        'fiber': float(nutriments.get('fiber') or 0),
-                        'image': product.get('image_front_small_url'),
-                        'brand': product.get('brands')
-                    })
-            
-            return Response({'success': True, 'data': products, 'count': len(products)})
-        else:
-            return Response({'success': False, 'error': 'فشل في الاتصال بقاعدة البيانات', 'data': []}, status=500)
-        
-    except Exception as e:
-        return Response({'success': False, 'error': str(e), 'data': []}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def suggest_exercises(request):
-    """اقتراح تمارين رياضية"""
-    try:
-        lang_param = request.query_params.get('lang')
-        accept_lang = request.headers.get('Accept-Language', 'ar')
-        language = lang_param if lang_param in ['ar', 'en'] else ('en' if accept_lang.startswith('en') else 'ar')
-        
-        muscle = request.query_params.get('muscle')
-        difficulty = request.query_params.get('difficulty')
-        
-        service = AdvancedHealthAnalytics(request.user, language=language)
-        exercises = service.suggest_exercises(muscle, difficulty)
-        
-        return Response({'success': True, 'data': exercises})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-# ==============================================================================
-# 🧠 التحليلات الذكية - مع دعم اللغة
-# ==============================================================================
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def smart_insights(request):
-    """تحليلات ذكية متكاملة مع دعم اللغة"""
-    user = request.user
-    today = timezone.now()
-    week_ago = today - timedelta(days=7)
-    
-    lang = get_request_language(request)
-    is_arabic = lang == 'ar'
-    
-    habits = HabitDefinition.objects.filter(user=user)
-    habit_logs = HabitLog.objects.filter(habit__user=user, log_date__gte=week_ago.date())
-    total_habits = habits.count()
-    completed_today = habit_logs.filter(log_date=today.date(), is_completed=True).count()
-    completion_rate = round((completed_today / total_habits) * 100) if total_habits > 0 else 0
-    
-    sleep_data = Sleep.objects.filter(user=user, sleep_start__gte=week_ago)
-    avg_sleep = sleep_data.aggregate(Avg('duration_hours'))['duration_hours__avg'] or 0
-    
-    mood_data = MoodEntry.objects.filter(user=user, entry_time__gte=week_ago)
-    mood_counts = mood_data.values('mood').annotate(count=Count('mood'))
-    dominant_mood = mood_counts.order_by('-count').first()
-    
-    meal_data = Meal.objects.filter(user=user, meal_time__gte=week_ago)
-    avg_calories = meal_data.aggregate(Avg('total_calories'))['total_calories__avg'] or 0
-    
-    recommendations = []
-    
-    if avg_sleep < 7:
-        recommendations.append({
-            'icon': '🌙', 
-            'title': get_translated_response('sleep_more_title', is_arabic) or ('نم أكثر لتحسين صحتك' if is_arabic else 'Get Enough Sleep'),
-            'tips': [
-                get_translated_response('sleep_tip_1', is_arabic) or ('حدد موعداً ثابتاً للنوم' if is_arabic else 'Set a fixed bedtime'),
-                get_translated_response('sleep_tip_2', is_arabic) or ('ابتعد عن الشاشات قبل النوم' if is_arabic else 'Avoid screens before sleep')
-            ],
-            'based_on': get_translated_response('based_on_7_days', is_arabic) or ('7 أيام' if is_arabic else '7 days'),
-            'improvement_chance': 80
-        })
-    
-    if completion_rate < 50:
-        recommendations.append({
-            'icon': '💊', 
-            'title': get_translated_response('habits_title', is_arabic) or ('التزم بعاداتك اليومية' if is_arabic else 'Stick to Daily Habits'),
-            'tips': [
-                get_translated_response('habits_tip_1', is_arabic) or ('ابدأ بعادة صغيرة وسهلة' if is_arabic else 'Start with a small, easy habit')
-            ],
-            'based_on': get_translated_response('based_on_today', is_arabic) or ('اليوم' if is_arabic else 'Today'),
-            'improvement_chance': 90
-        })
-    
-    if avg_calories < 1500:
-        recommendations.append({
-            'icon': '🥗', 
-            'title': get_translated_response('nutrition_title', is_arabic) or ('نظام غذائي متوازن' if is_arabic else 'Balanced Nutrition'),
-            'tips': [
-                get_translated_response('nutrition_tip_1', is_arabic) or ('أضف وجبات خفيفة صحية' if is_arabic else 'Add healthy snacks')
-            ],
-            'based_on': get_translated_response('based_on_last_week', is_arabic) or ('آخر أسبوع' if is_arabic else 'Last week'),
-            'improvement_chance': 85
-        })
-    
-    # ترجمة المزاج السائد
-    mood_translation = {
-        'Excellent': 'ممتاز' if is_arabic else 'Excellent',
-        'Good': 'جيد' if is_arabic else 'Good',
-        'Neutral': 'محايد' if is_arabic else 'Neutral',
-        'Stressed': 'مرهق' if is_arabic else 'Stressed',
-        'Anxious': 'قلق' if is_arabic else 'Anxious',
-        'Sad': 'حزين' if is_arabic else 'Sad'
-    }
-    
-    dominant_mood_text = mood_translation.get(dominant_mood['mood'] if dominant_mood else '', 
-                                               ('غير متوفر' if is_arabic else 'Not available'))
-    
-    return Response({
-        'success': True,
-        'data': {
-            'summary': {
-                'total_habits': total_habits, 
-                'completed_today': completed_today,
-                'completion_rate': completion_rate, 
-                'avg_sleep': round(float(avg_sleep), 1),
-                'dominant_mood': dominant_mood_text,
-                'avg_calories': round(float(avg_calories))
-            },
-            'recommendations': recommendations
-        },
-        'language': 'ar' if is_arabic else 'en'
-    })
-
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def advanced_cross_insights(request):
-    """تحليلات متقاطعة متقدمة"""
-    try:
-        lang_param = request.query_params.get('lang')
-        accept_lang = request.headers.get('Accept-Language', 'ar')
-        language = lang_param if lang_param in ['ar', 'en'] else ('en' if accept_lang.startswith('en') else 'ar')
-        
-        engine = HealthInsightsEngine(request.user, language=language)
-        data = {
-            'energy_consumption': engine.analyze_energy_consumption(),
-            'pulse_pressure': engine.analyze_pulse_pressure(),
-            'pre_exercise': engine.analyze_pre_exercise_risk(),
-            'vital_signs': engine.analyze_vital_signs(),
-            'holistic': engine.generate_holistic_recommendations(),
-            'predictive': engine.generate_predictive_alerts()
-        }
-        return Response({'success': True, 'data': data})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def cross_insights(request):
-    """تحليلات متقاطعة أساسية (للتوافق)"""
-    try:
-        from .services.cross_insights_service import CrossInsightsService
-        service = CrossInsightsService(request.user)
-        insights = service.get_all_correlations()
-        return Response({'success': True, 'data': insights})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-# ==============================================================================
-# 🔔 الإشعارات - مع دعم اللغة
-# ==============================================================================
-
-class NotificationViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    serializer_class = NotificationSerializer
-    
-    def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-sent_at')
-    
-    def list(self, request, *args, **kwargs):
-        try:
-            is_arabic = get_request_language(request) == 'ar'
-            notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
-            
-            notifications_list = []
-            for notification in notifications:
-                notifications_list.append({
-                    'id': notification.id,
-                    'title': notification.title,
-                    'message': notification.message,
-                    'type': notification.type,
-                    'priority': notification.priority,
-                    'is_read': notification.is_read,
-                    'action_url': notification.action_url,
-                    'created_at': notification.sent_at.isoformat() if notification.sent_at else None,
-                })
-            
-            return Response({
-                'success': True,
-                'count': len(notifications_list),
-                'results': notifications_list,
-                'language': 'ar' if is_arabic else 'en'
-            })
-        except Exception as e:
-            return Response({'success': True, 'count': 0, 'results': []})
-    
-    @action(detail=False, methods=['post'])
-    def mark_all_read(self, request):
-        is_arabic = get_request_language(request) == 'ar'
-        count = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        return Response({
-            'success': True, 
-            'count': count,
-            'message': get_translated_response('notifications_marked_read', is_arabic),
-            'language': 'ar' if is_arabic else 'en'
-        })    
-    def create(self, request, *args, **kwargs):
-        try:
-            data = request.data
-            notification = Notification.objects.create(
-                user=request.user,
-                title=data.get('title', 'LivoCare'),
-                message=data.get('message', ''),
-                type=data.get('type', 'info'),
-                priority=data.get('priority', 'medium'),
-                action_url=data.get('action_url', '/notifications'),
-                is_read=False
-            )
-            return Response({
-                'success': True,
-                'notification': {
-                    'id': notification.id,
-                    'title': notification.title,
-                    'message': notification.message,
-                }
-            }, status=201)
-        except Exception as e:
-            return Response({'success': False, 'error': str(e)}, status=500)
-    
-    def retrieve(self, request, pk=None):
-        try:
-            notification = Notification.objects.get(id=pk, user=request.user)
-            return Response({
-                'success': True,
-                'notification': {
-                    'id': notification.id,
-                    'title': notification.title,
-                    'message': notification.message,
-                    'type': notification.type,
-                    'priority': notification.priority,
-                    'is_read': notification.is_read,
-                    'action_url': notification.action_url,
-                    'created_at': notification.sent_at.isoformat() if notification.sent_at else None,
-                }
-            })
-        except Notification.DoesNotExist:
-            return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
-    
-    def destroy(self, request, pk=None):
-        try:
-            notification = Notification.objects.get(id=pk, user=request.user)
-            notification.delete()
-            return Response({'success': True, 'message': 'تم حذف الإشعار'})
-        except Notification.DoesNotExist:
-            return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
-    
-    @action(detail=False, methods=['get'])
-    def unread_count(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).count()
-        return Response({'unread_count': count})
-    
-    @action(detail=True, methods=['post'])
-    def mark_read(self, request, pk=None):
-        try:
-            notification = Notification.objects.get(id=pk, user=request.user)
-            notification.is_read = True
-            notification.save()
-            return Response({'success': True})
-        except Notification.DoesNotExist:
-            return Response({'success': False, 'error': 'الإشعار غير موجود'}, status=404)
-    
-    @action(detail=False, methods=['post'])
-    def mark_all_read(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
-        return Response({'success': True, 'count': count})
-    
-    @action(detail=False, methods=['delete'])
-    def delete_read(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=True).delete()[0]
-        return Response({'success': True, 'count': count})
-
-
-# ==============================================================================
-# 🔔 دوال إضافية للإشعارات
+# 🔔 10. الإشعارات (دوال منفصلة)
 # ==============================================================================
 
 @api_view(['POST'])
@@ -1481,17 +915,7 @@ def create_notification(request):
             action_url=data.get('action_url', '/notifications'),
             is_read=False
         )
-        return Response({
-            'success': True,
-            'notification': {
-                'id': notification.id,
-                'title': notification.title,
-                'message': notification.message,
-                'type': notification.type,
-                'priority': notification.priority,
-                'created_at': notification.sent_at
-            }
-        })
+        return Response({'success': True, 'notification': {'id': notification.id}})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 
@@ -1502,12 +926,7 @@ def get_notifications(request):
     try:
         notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
         serializer = NotificationSerializer(notifications, many=True)
-        return Response({
-            'success': True,
-            'notifications': serializer.data,
-            'total': notifications.count(),
-            'unread': notifications.filter(is_read=False).count()
-        })
+        return Response({'success': True, 'notifications': serializer.data})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 
@@ -1555,6 +974,97 @@ def delete_all_read_notifications(request):
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_my_notifications(request):
+    try:
+        notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
+        result = []
+        for n in notifications:
+            result.append({
+                'id': n.id,
+                'title': n.title,
+                'message': n.message,
+                'type': n.type,
+                'priority': n.priority,
+                'is_read': n.is_read,
+                'action_url': n.action_url,
+                'created_at': n.sent_at.isoformat() if n.sent_at else None,
+            })
+        return Response({'success': True, 'count': len(result), 'results': result})
+    except Exception as e:
+        return Response({'success': True, 'count': 0, 'results': []})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notifications_simple(request):
+    try:
+        notifications = Notification.objects.filter(user=request.user).order_by('-sent_at')
+        result = [{'id': n.id, 'title': n.title, 'message': n.message, 'is_read': n.is_read} for n in notifications]
+        return Response({'success': True, 'count': len(result), 'results': result})
+    except Exception as e:
+        return Response({'success': True, 'count': 0, 'results': []})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_test_notifications(request):
+    user = request.user
+    created = []
+    
+    notifications_data = [
+        {'title': '🎉 مرحباً في LivoCare', 'message': 'أهلاً بك في التطبيق!', 'type': 'health', 'priority': 'high'},
+        {'title': '💪 هدف اليوم', 'message': 'أنت على بعد 3000 خطوة من هدفك!', 'type': 'activity', 'priority': 'medium'},
+        {'title': '🥗 تذكير بالوجبة', 'message': 'حان وقت الغداء!', 'type': 'nutrition', 'priority': 'medium'},
+        {'title': '😊 كيف تشعر اليوم؟', 'message': 'سجل حالتك المزاجية', 'type': 'mood', 'priority': 'low'},
+        {'title': '🏆 إنجاز', 'message': 'لقد أكملت 7 أيام متتالية!', 'type': 'achievement', 'priority': 'high'},
+    ]
+    
+    for n in notifications_data:
+        notification = Notification.objects.create(user=user, **n, action_url='/dashboard', is_read=False)
+        created.append({'id': notification.id, 'title': notification.title})
+    
+    return Response({'success': True, 'created': created, 'total': Notification.objects.filter(user=user).count()})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_notification_from_sw(request):
+    try:
+        data = request.data
+        notification = Notification.objects.create(
+            user=request.user,
+            title=data.get('title', 'LivoCare'),
+            message=data.get('message', ''),
+            type=data.get('type', 'info'),
+            priority=data.get('priority', 'medium'),
+            action_url=data.get('action_url', '/notifications'),
+            is_read=False
+        )
+        return Response({'success': True, 'id': notification.id}, status=201)
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_push_notification(request):
+    try:
+        title = request.data.get('title', 'LivoCare')
+        message = request.data.get('message', 'لديك إشعار جديد')
+        
+        response = requests.post(
+            'https://notification-service-6nzm.onrender.com/notify/all',
+            json={'title': title, 'body': message, 'icon': '/logo192.png', 'url': '/dashboard'},
+            timeout=10
+        )
+        
+        return Response({'success': True, 'message': 'تم إرسال الإشعار'})
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def push_subscribe(request):
@@ -1575,242 +1085,9 @@ def get_user_achievements(request):
     return Response({'success': True, 'data': []})
 
 
-@api_view(['GET', 'POST'])
-@permission_classes([AllowAny])
-def trigger_notifications(request):
-    try:
-        return Response({
-            'success': True,
-            'message': 'تم تشغيل الإشعارات بنجاح',
-            'timestamp': timezone.now().isoformat()
-        })
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_my_notifications(request):
-    try:
-        user_id = request.user.id
-        notifications = Notification.objects.filter(user_id=user_id).order_by('-sent_at')
-        
-        result = []
-        for n in notifications:
-            result.append({
-                'id': n.id,
-                'title': n.title,
-                'message': n.message,
-                'type': n.type,
-                'priority': n.priority,
-                'is_read': n.is_read,
-                'action_url': n.action_url,
-                'created_at': n.sent_at.isoformat() if n.sent_at else None,
-            })
-        
-        return Response({
-            'success': True,
-            'count': len(result),
-            'results': result,
-            'unread': sum(1 for n in notifications if not n.is_read)
-        })
-    except Exception as e:
-        return Response({'success': True, 'count': 0, 'results': []}, status=200)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_notifications_simple(request):
-    try:
-        user = request.user
-        notifications = Notification.objects.filter(user=user).order_by('-sent_at')
-        
-        result = []
-        for n in notifications:
-            result.append({
-                'id': n.id,
-                'title': n.title,
-                'message': n.message,
-                'type': n.type,
-                'priority': n.priority,
-                'is_read': n.is_read,
-                'action_url': n.action_url,
-                'created_at': n.sent_at.isoformat() if n.sent_at else None,
-            })
-        
-        return Response({
-            'success': True,
-            'count': len(result),
-            'results': result
-        })
-    except Exception as e:
-        return Response({'success': True, 'count': 0, 'results': []})
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_test_notifications(request):
-    user = request.user
-    created = []
-    
-    notifications_data = [
-        {'title': '🎉 مرحباً في LivoCare', 'message': 'أهلاً بك في التطبيق!', 'type': 'health', 'priority': 'high'},
-        {'title': '💪 هدف اليوم', 'message': 'أنت على بعد 3000 خطوة من هدفك!', 'type': 'activity', 'priority': 'medium'},
-        {'title': '🥗 تذكير بالوجبة', 'message': 'حان وقت الغداء!', 'type': 'nutrition', 'priority': 'medium'},
-        {'title': '😊 كيف تشعر اليوم؟', 'message': 'سجل حالتك المزاجية', 'type': 'mood', 'priority': 'low'},
-        {'title': '🏆 إنجاز', 'message': 'لقد أكملت 7 أيام متتالية!', 'type': 'achievement', 'priority': 'high'},
-    ]
-    
-    for n in notifications_data:
-        notification = Notification.objects.create(
-            user=user,
-            title=n['title'],
-            message=n['message'],
-            type=n['type'],
-            priority=n['priority'],
-            action_url='/dashboard',
-            is_read=False
-        )
-        created.append({'id': notification.id, 'title': notification.title})
-    
-    return Response({
-        'success': True,
-        'user_id': user.id,
-        'username': user.username,
-        'created': created,
-        'total': Notification.objects.filter(user=user).count()
-    })
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def notifications_emergency(request):
-    try:
-        user = request.user
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT id, title, message, type, priority, is_read, action_url, sent_at
-                FROM main_notification
-                WHERE user_id = %s
-                ORDER BY sent_at DESC
-            """, [user.id])
-            
-            rows = cursor.fetchall()
-            results = []
-            for row in rows:
-                results.append({
-                    'id': row[0],
-                    'title': row[1],
-                    'message': row[2],
-                    'type': row[3],
-                    'priority': row[4],
-                    'is_read': row[5],
-                    'action_url': row[6],
-                    'sent_at': row[7].isoformat() if row[7] else None,
-                })
-        
-        return Response({
-            'success': True,
-            'count': len(results),
-            'results': results
-        })
-    except Exception as e:
-        return Response({'success': True, 'count': 0, 'results': []})
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def notifications_raw(request):
-    try:
-        user_id = request.user.id
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT id, title, message, type, priority, is_read, action_url, sent_at
-                FROM main_notification 
-                WHERE user_id = %s 
-                ORDER BY sent_at DESC
-            """, [user_id])
-            
-            rows = cursor.fetchall()
-            results = []
-            for row in rows:
-                results.append({
-                    'id': row[0],
-                    'title': row[1],
-                    'message': row[2],
-                    'type': row[3],
-                    'priority': row[4],
-                    'is_read': row[5],
-                    'action_url': row[6],
-                    'sent_at': row[7].isoformat() if row[7] else None,
-                })
-        
-        return Response({
-            'success': True,
-            'count': len(results),
-            'results': results
-        })
-    except Exception as e:
-        return Response({'success': True, 'count': 0, 'results': []})
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def send_push_notification(request):
-    """إرسال إشعار منبثق للمستخدم الحالي"""
-    try:
-        user = request.user
-        title = request.data.get('title', 'LivoCare')
-        message = request.data.get('message', 'لديك إشعار جديد')
-        
-        response = requests.post(
-            'https://notification-service-6nzm.onrender.com/notify/all',
-            json={
-                'title': title,
-                'body': message,
-                'icon': '/logo192.png',
-                'url': '/dashboard'
-            },
-            timeout=10
-        )
-        
-        return Response({
-            'success': True,
-            'message': 'تم إرسال الإشعار',
-            'service_response': response.json() if response.ok else None
-        })
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-    
-# في main/views.py - أضف هذه الدالة
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def save_notification_from_sw(request):
-    """حفظ إشعار من Service Worker"""
-    try:
-        data = request.data
-        notification = Notification.objects.create(
-            user=request.user,
-            title=data.get('title', 'LivoCare'),
-            message=data.get('message', ''),
-            type=data.get('type', 'info'),
-            priority=data.get('priority', 'medium'),
-            action_url=data.get('action_url', '/notifications'),
-            is_read=False
-        )
-        return Response({
-            'success': True,
-            'id': notification.id
-        }, status=201)
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-# main/views.py - أضف هذه الدوال في نهاية الملف
-
-from datetime import datetime, time
-from django.utils import timezone
+# ==============================================================================
+# 🤖 11. إشعارات ذكية و Cron Jobs
+# ==============================================================================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1821,103 +1098,54 @@ def check_and_send_smart_notifications(request):
     now = timezone.now()
     created_count = 0
     
-    # 1. ✅ إشعار الوجبة (إذا لم يسجل وجبة اليوم)
     meals_today = Meal.objects.filter(user=user, meal_time__date=today).count()
     if meals_today == 0:
         Notification.objects.create(
-            user=user,
-            title='🥗 تذكير بالوجبة',
-            message='لم تسجل أي وجبة اليوم! حان وقت تسجيل وجبتك الصحية.',
-            type='nutrition',
-            priority='medium',
-            action_url='/nutrition',
-            is_read=False
+            user=user, title='🥗 تذكير بالوجبة', message='لم تسجل أي وجبة اليوم!',
+            type='nutrition', priority='medium', action_url='/nutrition', is_read=False
         )
-        created_count += 1
-        # ✅ إرسال Push
         send_push_notification_to_user(user.id, '🥗 تذكير بالوجبة', 'لم تسجل أي وجبة اليوم!', '/nutrition')
+        created_count += 1
     
-    # 2. ✅ إشعار النشاط (إذا لم يسجل أي نشاط)
     activities_today = PhysicalActivity.objects.filter(user=user, start_time__date=today).count()
     if activities_today == 0:
         Notification.objects.create(
-            user=user,
-            title='🏃 حان وقت الحركة',
-            message='لم تمارس أي نشاط بدني اليوم! المشي 30 دقيقة يحسن صحتك.',
-            type='activity',
-            priority='medium',
-            action_url='/activities',
-            is_read=False
+            user=user, title='🏃 حان وقت الحركة', message='المشي 30 دقيقة يحسن صحتك.',
+            type='activity', priority='medium', action_url='/activities', is_read=False
         )
-        created_count += 1
         send_push_notification_to_user(user.id, '🏃 حان وقت الحركة', 'لم تمارس أي نشاط بدني اليوم!', '/activities')
+        created_count += 1
     
-    # 3. ✅ إشعار المزاج (إذا لم يسجل مزاجه)
     mood_today = MoodEntry.objects.filter(user=user, entry_time__date=today).count()
     if mood_today == 0:
         Notification.objects.create(
-            user=user,
-            title='😊 كيف تشعر اليوم؟',
-            message='سجل حالتك المزاجية الآن لتتبع صحتك النفسية.',
-            type='mood',
-            priority='low',
-            action_url='/mood',
-            is_read=False
+            user=user, title='😊 كيف تشعر اليوم؟', message='سجل حالتك المزاجية الآن',
+            type='mood', priority='low', action_url='/mood', is_read=False
         )
-        created_count += 1
         send_push_notification_to_user(user.id, '😊 كيف تشعر اليوم؟', 'سجل حالتك المزاجية الآن', '/mood')
+        created_count += 1
     
-    # 4. ✅ إشعار النوم (إذا كان الوقت متأخراً ولم يسجل نومه)
     current_hour = now.hour
     if current_hour >= 22:
         sleep_today = Sleep.objects.filter(user=user, sleep_start__date=today).count()
         if sleep_today == 0:
             Notification.objects.create(
-                user=user,
-                title='🌙 وقت النوم',
-                message='حان وقت النوم! النوم الكافي يحسن صحتك ونشاطك غداً.',
-                type='sleep',
-                priority='medium',
-                action_url='/sleep',
-                is_read=False
+                user=user, title='🌙 وقت النوم', message='النوم الكافي يحسن صحتك',
+                type='sleep', priority='medium', action_url='/sleep', is_read=False
             )
-            created_count += 1
             send_push_notification_to_user(user.id, '🌙 وقت النوم', 'حان وقت النوم! نم باكراً', '/sleep')
-    
-    # 5. ✅ إشعار العادات (للعادات غير المكتملة)
-    habits = HabitDefinition.objects.filter(user=user, is_active=True)
-    habit_count = 0
-    for habit in habits:
-        log_today = HabitLog.objects.filter(habit=habit, log_date=today).exists()
-        if not log_today and habit_count < 3:
-            Notification.objects.create(
-                user=user,
-                title=f'💊 {habit.name}',
-                message=f'لم تسجل عادتك "{habit.name}" اليوم.',
-                type='habit',
-                priority='low',
-                action_url='/habits',
-                is_read=False
-            )
             created_count += 1
-            habit_count += 1
-            send_push_notification_to_user(user.id, f'💊 {habit.name}', f'لم تسجل عادتك "{habit.name}" اليوم', '/habits')
     
-    return Response({
-        'success': True,
-        'message': f'تم إنشاء {created_count} إشعار ذكي',
-        'count': created_count
-    })
+    return Response({'success': True, 'message': f'تم إنشاء {created_count} إشعار ذكي', 'count': created_count})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_daily_summary_notification(request):
-    """إرسال ملخص اليوم (مع Push)"""
+    """إرسال ملخص اليوم"""
     user = request.user
     today = timezone.now().date()
     
-    # إحصائيات اليوم
     activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
     total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
     total_calories_burned = activities.aggregate(Sum('calories_burned'))['calories_burned__sum'] or 0
@@ -1928,273 +1156,143 @@ def send_daily_summary_notification(request):
     sleep = Sleep.objects.filter(user=user, sleep_start__date=today).first()
     sleep_hours = sleep.duration_hours if sleep else 0
     
-    # رسالة مختصرة للإشعار المنبثق
     push_message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}"
-    if sleep_hours > 0:
-        push_message += f" | 😴 نوم: {sleep_hours} ساعات"
-    
-    # رسالة كاملة للإشعار داخل التطبيق
-    full_message = f"📊 **ملخص يومك**\n\n"
-    full_message += f"🚶 النشاط: {total_minutes} دقيقة ({total_calories_burned} سعرة)\n"
-    full_message += f"🍽️ السعرات المتناولة: {total_calories_consumed}\n"
-    if sleep_hours > 0:
-        full_message += f"😴 النوم: {sleep_hours} ساعات\n"
-    
-    # نصائح تحفيزية
-    if total_minutes < 30:
-        full_message += f"\n⚠️ نشاطك اليومي منخفض! حاول المشي 30 دقيقة غداً."
-    elif total_calories_consumed < 1200:
-        full_message += f"\n⚠️ سعراتك الحرارية منخفضة! تناول وجبات متوازنة."
-    else:
-        full_message += f"\n🎉 أداء ممتاز! حافظ على هذا المستوى."
     
     Notification.objects.create(
-        user=user,
-        title="🌙 ملخص يومك",
-        message=full_message,
-        type="summary",
-        priority="medium",
-        action_url="/dashboard",
-        is_read=False
+        user=user, title="🌙 ملخص يومك", message=push_message,
+        type="summary", priority="medium", action_url="/dashboard", is_read=False
     )
     
-    # ✅ إرسال Push
     send_push_notification_to_user(user.id, "🌙 ملخص يومك", push_message, "/dashboard")
     
-    return Response({
-        'success': True,
-        'message': 'تم إرسال ملخص اليوم',
-        'stats': {
-            'activity_minutes': total_minutes,
-            'calories_burned': total_calories_burned,
-            'calories_consumed': total_calories_consumed,
-            'sleep_hours': sleep_hours
-        }
-    })
+    return Response({'success': True, 'message': 'تم إرسال ملخص اليوم'})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_morning_tip(request):
-    """إرسال نصيحة صباحية (مع Push)"""
+    """إرسال نصيحة صباحية"""
     user = request.user
     
     tips = [
         {'title': '💧 شرب الماء', 'message': 'ابدأ يومك بكوب من الماء الدافئ لتنشيط الجسم.'},
         {'title': '🍳 فطور صحي', 'message': 'لا تهمل وجبة الإفطار! تناول بروتين وخضروات.'},
         {'title': '🚶 نشاط صباحي', 'message': 'تمدد أو امشِ 10 دقائق لتنشيط الدورة الدموية.'},
-        {'title': '📝 تخطيط اليوم', 'message': 'خطط لأهدافك اليومية قبل بدء العمل.'},
-        {'title': '😊 امتنان', 'message': 'خذ دقيقة لتفكر في 3 أشياء تشعر بالامتنان لها.'},
     ]
     
     import random
     tip = random.choice(tips)
     
     Notification.objects.create(
-        user=user,
-        title=tip['title'],
-        message=tip['message'],
-        type="tip",
-        priority="low",
-        action_url="/tips",
-        is_read=False
+        user=user, title=tip['title'], message=tip['message'],
+        type="tip", priority="low", action_url="/tips", is_read=False
     )
     
-    # ✅ إرسال Push
     send_push_notification_to_user(user.id, tip['title'], tip['message'], "/tips")
     
-    return Response({
-        'success': True,
-        'tip': tip
-    })
+    return Response({'success': True, 'tip': tip})
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def send_notifications_to_all_users(request):
-    """إرسال إشعارات لجميع المستخدمين (للمسؤول)"""
-    users = CustomUser.objects.all()
+    """إرسال إشعارات لجميع المستخدمين"""
+    users = CustomUser.objects.filter(is_active=True)
     total = 0
     
     for user in users:
         Notification.objects.create(
-            user=user,
-            title="🌙 مساء الخير",
-            message="كيف كان يومك؟ لا تنسى تسجيل نشاطك ومزاجك اليوم",
-            type="reminder",
-            priority="medium",
-            action_url="/dashboard",
-            is_read=False
+            user=user, title="🌙 مساء الخير", message="كيف كان يومك؟ لا تنسى تسجيل نشاطك",
+            type="reminder", priority="medium", action_url="/dashboard", is_read=False
         )
         total += 1
     
-    return Response({
-        'success': True,
-        'message': f'تم إرسال الإشعارات إلى {total} مستخدم'
-    })
-    # ==============================================================================
-# 📅 endpoints عامة لـ Cron Jobs (بدون مصادقة) مع Push Notifications
-# ==============================================================================
+    return Response({'success': True, 'message': f'تم إرسال الإشعارات إلى {total} مستخدم'})
 
-def send_push_to_all_users(title, body, url='/'):
-    """إرسال إشعار منبثق لجميع المستخدمين"""
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def generate_notifications_now(request):
+    """توليد إشعارات فورية"""
+    from main.services.notification_service import NotificationService
     try:
-        requests.post(
-            'https://notification-service-6nzm.onrender.com/notify/all',
-            json={'title': title, 'body': body, 'icon': '/logo192.png', 'url': url},
-            timeout=5
-        )
+        if request.user.is_authenticated:
+            count = NotificationService.generate_all_notifications(request.user)
+        else:
+            count = 0
+        return Response({'success': True, 'message': f'✅ تم إنشاء {count} إشعار جديد', 'count': count})
     except Exception as e:
-        print(f"Push error: {e}")
+        return Response({'success': False, 'error': str(e)}, status=500)
 
 
-def send_push_to_user(user_id, title, body, url='/'):
-    """إرسال إشعار منبثق لمستخدم محدد"""
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def trigger_notifications(request):
     try:
-        requests.post(
-            f'https://notification-service-6nzm.onrender.com/notify/{user_id}',
-            json={'title': title, 'body': body, 'icon': '/logo192.png', 'url': url},
-            timeout=5
-        )
+        return Response({'success': True, 'message': 'تم تشغيل الإشعارات بنجاح', 'timestamp': timezone.now().isoformat()})
     except Exception as e:
-        print(f"Push error for user {user_id}: {e}")
+        return Response({'success': False, 'error': str(e)}, status=500)
 
 
 # ==============================================================================
-# 📅 endpoints عامة لـ Cron Jobs - مع دعم اللغة
+# 📅 12. Cron Jobs endpoints (بدون مصادفة - لـ cron-job.org)
 # ==============================================================================
 
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_daily_summary(request):
-    """إرسال ملخص اليوم لجميع المستخدمين - مع دعم اللغة"""
+    """إرسال ملخص اليوم لجميع المستخدمين"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         today = timezone.now().date()
         total = 0
         
         for user in users:
-            # تحديد لغة المستخدم
-            user_lang = 'ar'
-            try:
-                if hasattr(user, 'profile') and user.profile.language:
-                    user_lang = user.profile.language
-            except:
-                pass
-            
-            is_arabic = user_lang == 'ar'
-            
-            # إحصائيات اليوم
             activities = PhysicalActivity.objects.filter(user=user, start_time__date=today)
             total_minutes = activities.aggregate(Sum('duration_minutes'))['duration_minutes__sum'] or 0
-            total_calories_burned = activities.aggregate(Sum('calories_burned'))['calories_burned__sum'] or 0
             
             meals = Meal.objects.filter(user=user, meal_time__date=today)
-            total_calories_consumed = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
+            total_calories = meals.aggregate(Sum('total_calories'))['total_calories__sum'] or 0
             
-            sleep = Sleep.objects.filter(user=user, sleep_start__date=today).first()
-            sleep_hours = sleep.duration_hours if sleep else 0
+            message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories}"
             
-            # رسالة مختصرة للإشعار المنبثق
-            if is_arabic:
-                push_message = f"📊 نشاط: {total_minutes} دقيقة | 🍽️ سعرات: {total_calories_consumed}"
-                if sleep_hours > 0:
-                    push_message += f" | 😴 نوم: {sleep_hours} ساعات"
-                title = "🌙 ملخص يومك"
-            else:
-                push_message = f"📊 Activity: {total_minutes} min | 🍽️ Calories: {total_calories_consumed}"
-                if sleep_hours > 0:
-                    push_message += f" | 😴 Sleep: {sleep_hours} hours"
-                title = "🌙 Your Daily Summary"
-            
-            # رسالة كاملة للإشعار داخل التطبيق
-            if is_arabic:
-                full_message = f"📊 **ملخص يومك**\n\n"
-                full_message += f"🚶 النشاط: {total_minutes} دقيقة ({total_calories_burned} سعرة)\n"
-                full_message += f"🍽️ السعرات المتناولة: {total_calories_consumed}\n"
-                if sleep_hours > 0:
-                    full_message += f"😴 النوم: {sleep_hours} ساعات\n"
-                
-                if total_minutes < 30:
-                    full_message += f"\n⚠️ نشاطك اليومي منخفض! حاول المشي 30 دقيقة غداً."
-                elif total_calories_consumed < 1200:
-                    full_message += f"\n⚠️ سعراتك الحرارية منخفضة! تناول وجبات متوازنة."
-                else:
-                    full_message += f"\n🎉 أداء ممتاز! حافظ على هذا المستوى."
-            else:
-                full_message = f"📊 **Your Daily Summary**\n\n"
-                full_message += f"🚶 Activity: {total_minutes} min ({total_calories_burned} cal)\n"
-                full_message += f"🍽️ Calories consumed: {total_calories_consumed}\n"
-                if sleep_hours > 0:
-                    full_message += f"😴 Sleep: {sleep_hours} hours\n"
-                
-                if total_minutes < 30:
-                    full_message += f"\n⚠️ Your daily activity is low! Try walking 30 minutes tomorrow."
-                elif total_calories_consumed < 1200:
-                    full_message += f"\n⚠️ Your calorie intake is low! Eat balanced meals."
-                else:
-                    full_message += f"\n🎉 Great performance! Keep it up."
-            
-            # ✅ حفظ في قاعدة البيانات
             Notification.objects.create(
-                user=user,
-                title=title,
-                message=full_message,
-                type="summary",
-                priority="medium",
-                action_url="/dashboard",
-                is_read=False
+                user=user, title="🌙 ملخص يومك", message=message,
+                type="summary", priority="medium", action_url="/dashboard", is_read=False
             )
             
-            # ✅ إرسال إشعار منبثق
-            send_push_to_user(user.id, title, push_message, "/dashboard")
+            send_push_notification_to_user(user.id, "🌙 ملخص يومك", message, "/dashboard")
             total += 1
         
-        return Response({
-            'success': True,
-            'message': f'تم إرسال الملخص إلى {total} مستخدم (مع Push)',
-            'timestamp': timezone.now().isoformat()
-        })
+        return Response({'success': True, 'message': f'تم إرسال الملخص إلى {total} مستخدم'})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_morning_tip(request):
-    """إرسال نصيحة صباحية لجميع المستخدمين - لـ cron-job.org (مع Push)"""
+    """إرسال نصيحة صباحية لجميع المستخدمين"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         tips = [
-            {'title': '💧 اشرب ماء', 'message': 'ابدأ يومك بكوب من الماء الدافئ لتنشيط الجسم'},
-            {'title': '🍳 فطور صحي', 'message': 'لا تهمل وجبة الإفطار! تناول بروتين وخضروات'},
+            {'title': '💧 اشرب ماء', 'message': 'ابدأ يومك بكوب من الماء الدافئ'},
+            {'title': '🍳 فطور صحي', 'message': 'لا تهمل وجبة الإفطار'},
             {'title': '🚶 تمدد', 'message': 'تمدد أو امشِ 10 دقائق لتنشيط الدورة الدموية'},
-            {'title': '📝 خطط', 'message': 'خطط لأهدافك اليومية قبل بدء العمل'},
-            {'title': '😊 امتنان', 'message': 'خذ دقيقة لتفكر في 3 أشياء تشعر بالامتنان لها'},
         ]
         import random
         tip = random.choice(tips)
         total = 0
         
         for user in users:
-            # ✅ حفظ في قاعدة البيانات
             Notification.objects.create(
-                user=user,
-                title=tip['title'],
-                message=tip['message'],
-                type="tip",
-                priority="low",
-                action_url="/dashboard",
-                is_read=False
+                user=user, title=tip['title'], message=tip['message'],
+                type="tip", priority="low", action_url="/dashboard", is_read=False
             )
-            
-            # ✅ إرسال إشعار منبثق
-            send_push_to_user(user.id, tip['title'], tip['message'], "/dashboard")
+            send_push_notification_to_user(user.id, tip['title'], tip['message'], "/dashboard")
             total += 1
         
-        return Response({
-            'success': True,
-            'message': f'تم إرسال النصيحة إلى {total} مستخدم (مع Push)',
-            'tip': tip,
-            'timestamp': timezone.now().isoformat()
-        })
+        return Response({'success': True, 'message': f'تم إرسال النصيحة إلى {total} مستخدم', 'tip': tip})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 
@@ -2202,7 +1300,7 @@ def cron_morning_tip(request):
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def cron_smart_notifications(request):
-    """إرسال إشعارات ذكية لجميع المستخدمين - لـ cron-job.org (مع Push)"""
+    """إرسال إشعارات ذكية لجميع المستخدمين"""
     try:
         users = CustomUser.objects.filter(is_active=True)
         today = timezone.now().date()
@@ -2211,67 +1309,30 @@ def cron_smart_notifications(request):
         for user in users:
             created = 0
             
-            # تذكير بالوجبة
-            meals_today = Meal.objects.filter(user=user, meal_time__date=today).count()
-            if meals_today == 0:
+            if Meal.objects.filter(user=user, meal_time__date=today).count() == 0:
                 Notification.objects.create(
-                    user=user,
-                    title='🥗 تذكير بالوجبة',
-                    message='لم تسجل أي وجبة اليوم! حان وقت تسجيل وجبتك الصحية.',
-                    type='nutrition',
-                    priority='medium',
-                    action_url='/nutrition',
-                    is_read=False
+                    user=user, title='🥗 تذكير بالوجبة', message='لم تسجل أي وجبة اليوم!',
+                    type='nutrition', priority='medium', action_url='/nutrition', is_read=False
                 )
-                send_push_to_user(user.id, '🥗 تذكير بالوجبة', 'لم تسجل أي وجبة اليوم!', '/nutrition')
                 created += 1
             
-            # تذكير بالنشاط
-            activities_today = PhysicalActivity.objects.filter(user=user, start_time__date=today).count()
-            if activities_today == 0:
+            if PhysicalActivity.objects.filter(user=user, start_time__date=today).count() == 0:
                 Notification.objects.create(
-                    user=user,
-                    title='🏃 حان وقت الحركة',
-                    message='لم تمارس أي نشاط بدني اليوم! المشي 30 دقيقة يحسن صحتك.',
-                    type='activity',
-                    priority='medium',
-                    action_url='/activities',
-                    is_read=False
+                    user=user, title='🏃 حان وقت الحركة', message='المشي 30 دقيقة يحسن صحتك.',
+                    type='activity', priority='medium', action_url='/activities', is_read=False
                 )
-                send_push_to_user(user.id, '🏃 حان وقت الحركة', 'لم تمارس أي نشاط بدني اليوم!', '/activities')
-                created += 1
-            
-            # تذكير بالمزاج
-            mood_today = MoodEntry.objects.filter(user=user, entry_time__date=today).count()
-            if mood_today == 0:
-                Notification.objects.create(
-                    user=user,
-                    title='😊 كيف تشعر اليوم؟',
-                    message='سجل حالتك المزاجية الآن لتتبع صحتك النفسية.',
-                    type='mood',
-                    priority='low',
-                    action_url='/mood',
-                    is_read=False
-                )
-                send_push_to_user(user.id, '😊 كيف تشعر اليوم؟', 'سجل حالتك المزاجية الآن', '/mood')
                 created += 1
             
             if created > 0:
                 total += 1
         
-        return Response({
-            'success': True,
-            'message': f'تم إرسال الإشعارات الذكية إلى {total} مستخدم (مع Push)',
-            'timestamp': timezone.now().isoformat()
-        })
+        return Response({'success': True, 'message': f'تم إرسال الإشعارات الذكية إلى {total} مستخدم'})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
 def cron_test_simple(request):
     """Endpoint بسيط لاختبار cron-job.org"""
     return JsonResponse({
@@ -2279,8 +1340,10 @@ def cron_test_simple(request):
         'message': 'Cron job is working!',
         'timestamp': timezone.now().isoformat()
     })
+
+
 # ==============================================================================
-# ⌚ بيانات الساعة الذكية
+# ⌚ 13. بيانات الساعة الذكية
 # ==============================================================================
 
 @api_view(['POST'])
@@ -2308,71 +1371,35 @@ def watch_health_data(request):
 def watch_history(request):
     try:
         data = HealthStatus.objects.filter(user=request.user).order_by('-recorded_at')[:50]
-        result = [{'id': item.id, 'heart_rate': item.heart_rate, 'systolic_pressure': item.systolic_pressure,
-                   'diastolic_pressure': item.diastolic_pressure, 'recorded_at': item.recorded_at.isoformat()}
-                  for item in data]
+        result = [{'id': item.id, 'heart_rate': item.heart_rate, 'recorded_at': item.recorded_at.isoformat()} for item in data]
         return Response({'success': True, 'data': result})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
-# ==============================================================================
-# 🔐 المصادقة
-# ==============================================================================
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def google_auth(request):
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def adb_watch_data(request):
+    """استقبال بيانات من ESP32"""
     try:
-        data = json.loads(request.body)
-        email = data.get('email')
-        name = data.get('name', '')
-        google_id = data.get('google_id', '')
-        picture = data.get('picture', '')
+        data = request.data
+        logger.info(f"📡 ESP32 data received: {data}")
         
-        if not email:
-            return JsonResponse({'error': 'Email is required'}, status=400)
+        heart_rate = data.get('bpm') or data.get('heart_rate')
+        spo2 = data.get('spo2') or data.get('oxygen')
         
-        name_parts = name.split(' ', 1)
-        first_name = name_parts[0]
-        last_name = name_parts[1] if len(name_parts) > 1 else ''
-        
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                'username': email.split('@')[0],
-                'first_name': first_name,
-                'last_name': last_name,
-            }
+        health_data = HealthStatus.objects.create(
+            user=request.user, heart_rate=heart_rate, spo2=spo2, recorded_at=timezone.now()
         )
         
-        if not created:
-            if not user.first_name:
-                user.first_name = first_name
-            if not user.last_name:
-                user.last_name = last_name
-            user.save()
-        
-        refresh = RefreshToken.for_user(user)
-        
-        return JsonResponse({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-            }
-        })
-        
+        return Response({'success': True, 'data': {'id': health_data.id}})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.error(f"❌ ESP32 data error: {e}")
+        return Response({'success': False, 'error': str(e)}, status=500)
 
 
 # ==============================================================================
-# 📷 مسح الباركود
+# 📷 14. ماسح الباركود
 # ==============================================================================
 
 @csrf_exempt
@@ -2388,7 +1415,7 @@ def scan_barcode(request):
 
 
 # ==============================================================================
-# 🩺 الأدوية
+# 🩺 15. الأدوية (FDA API)
 # ==============================================================================
 
 class OpenFDAService:
@@ -2453,7 +1480,7 @@ def delete_user_medication(request, user_med_id):
 
 
 # ==============================================================================
-# 🧪 دوال اختبارية
+# 🧪 16. دوال اختبارية
 # ==============================================================================
 
 @api_view(['GET'])
@@ -2462,63 +1489,39 @@ def test_websocket(request):
     return Response({'success': True, 'message': 'WebSocket API is working', 'status': 'ok'})
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def generate_notifications_now(request):
-    from main.services.notification_service import NotificationService
-    try:
-        count = NotificationService.generate_all_notifications(request.user)
-        return Response({'success': True, 'message': f'✅ تم إنشاء {count} إشعار جديد', 'count': count})
-    except Exception as e:
-        return Response({'success': False, 'error': str(e)}, status=500)
-
-
 # ==============================================================================
-# ⌚ بيانات الساعة الذكية - مع دعم اللغة
+# 🔐 17. مصادقة Google
 # ==============================================================================
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def adb_watch_data(request):
-    """استقبال بيانات من ESP32 مع دعم اللغة"""
+@csrf_exempt
+@require_http_methods(["POST"])
+def google_auth(request):
     try:
-        data = request.data
-        is_arabic = get_request_language(request) == 'ar'
+        data = json.loads(request.body)
+        email = data.get('email')
         
-        logger.info(f"📡 ESP32 data received: {data}")
+        if not email:
+            return JsonResponse({'error': 'Email is required'}, status=400)
         
-        heart_rate = data.get('bpm') or data.get('heart_rate') or data.get('heartRate')
-        spo2 = data.get('spo2') or data.get('oxygen') or data.get('SpO2')
-        systolic = data.get('systolic') or data.get('systolic_pressure')
-        diastolic = data.get('diastolic') or data.get('diastolic_pressure')
-        timestamp = data.get('timestamp') or data.get('recorded_at') or timezone.now()
+        name_parts = data.get('name', '').split(' ', 1)
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
         
-        health_data = HealthStatus.objects.create(
-            user=request.user,
-            heart_rate=heart_rate,
-            spo2=spo2,
-            systolic_pressure=systolic,
-            diastolic_pressure=diastolic,
-            recorded_at=timestamp
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                'username': email.split('@')[0],
+                'first_name': first_name,
+                'last_name': last_name,
+            }
         )
         
-        logger.info(f"✅ ESP32 data saved: ID={health_data.id}, HR={heart_rate}, SpO2={spo2}")
+        refresh = RefreshToken.for_user(user)
         
-        success_msg = get_translated_response('esp32_data_received', is_arabic) or ('تم استلام بيانات ESP32 بنجاح' if is_arabic else 'ESP32 data received successfully')
-        
-        return Response({
-            'success': True,
-            'message': success_msg,
-            'data': {
-                'id': health_data.id,
-                'heart_rate': health_data.heart_rate,
-                'spo2': health_data.spo2,
-                'recorded_at': health_data.recorded_at.isoformat()
-            },
-            'language': 'ar' if is_arabic else 'en'
+        return JsonResponse({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {'id': user.id, 'username': user.username, 'email': user.email}
         })
-        
     except Exception as e:
-        logger.error(f"❌ ESP32 data error: {e}")
-        error_msg = get_translated_response('esp32_error', is_arabic) or ('خطأ في معالجة بيانات ESP32' if is_arabic else 'Error processing ESP32 data')
-        return Response({'success': False, 'error': error_msg}, status=500)
+        return JsonResponse({'error': str(e)}, status=400)

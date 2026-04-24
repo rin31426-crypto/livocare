@@ -4,7 +4,8 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView 
 from django.http import JsonResponse  
 from main.views import (
-    scan_barcode, advanced_cross_insights, google_auth,
+    # ✅ جميع الدوال المستوردة
+    scan_barcode, advanced_cross_insights, cross_insights, google_auth,
     trigger_notifications, generate_notifications_now,
     push_subscribe,
     # ✅ إدارة الحساب
@@ -15,18 +16,28 @@ from main.views import (
     create_notification, get_notifications,
     mark_notification_read, mark_all_notifications_read,
     delete_notification, delete_all_read_notifications,
-    get_my_notifications,
+    get_my_notifications, get_notifications_simple, create_test_notifications,
     # ✅ دوال إضافية
     save_notification_from_sw, send_push_notification,
     check_and_send_smart_notifications, send_daily_summary_notification,
     send_morning_tip, send_notifications_to_all_users,
     cron_daily_summary, cron_morning_tip, cron_smart_notifications,
-    cron_test_simple
+    cron_test_simple,
+    # ✅ APIs خارجية
+    get_weather, search_food, suggest_exercises, analyze_sentiment,
+    get_smart_recommendations,
+    # ✅ بيانات الساعة
+    watch_health_data, watch_history, adb_watch_data,
+    # ✅ الأدوية
+    search_medication, get_medication_details, get_user_medications,
+    add_user_medication, delete_user_medication,
+    # ✅ أخرى
+    get_user_achievements, test_websocket, smart_insights,
 )
 from main import views
 
 # =========================================================
-# ✅ إنشاء الـ Router (مرة واحدة فقط لكل ViewSet)
+# ✅ إنشاء الـ Router
 # =========================================================
 router = DefaultRouter()
 router.register(r'activities', views.PhysicalActivityViewSet, basename='activities')
@@ -44,11 +55,10 @@ router.register(r'recommendations', views.RecommendationViewSet, basename='recom
 router.register(r'chat-logs', views.ChatLogViewSet, basename='chat-logs')
 router.register(r'notifications', views.NotificationViewSet, basename='notifications')
 router.register(r'environment-data', views.EnvironmentDataViewSet, basename='environment-data')
-router.register(r'users', views.UserProfileViewSet, basename='users')
 
 
 # =========================================================
-# ✅ المسارات الأساسية - مع دعم اللغة
+# ✅ المسارات الأساسية
 # =========================================================
 base_urls = [
     # 🔐 المصادقة
@@ -57,24 +67,24 @@ base_urls = [
     
     # 🧠 التحليلات الذكية
     path('advanced-insights/', advanced_cross_insights, name='advanced-insights'),
-    path('analytics/smart-insights/', views.smart_insights, name='smart-insights'),
-    path('cross-insights/', views.cross_insights, name='cross-insights'),
-    path('analytics/cross-insights/', views.cross_insights, name='cross-insights-alt'),
+    path('cross-insights/', cross_insights, name='cross-insights'),
+    path('analytics/smart-insights/', smart_insights, name='smart-insights'),
+    path('analytics/cross-insights/', cross_insights, name='cross-insights-alt'),
     
-    # 🌤️ الطقس (مع دعم اللغة)
-    path('weather/', views.get_weather, name='weather'),
+    # 🌤️ الطقس
+    path('weather/', get_weather, name='weather'),
     
     # 🥗 التغذية والبحث عن الطعام
-    path('food/search/', views.search_food, name='food-search'),
+    path('food/search/', search_food, name='food-search'),
     
-    # 💪 التمارين الرياضية (مع دعم اللغة)
-    path('exercises/suggest/', views.suggest_exercises, name='exercise-suggest'),
+    # 💪 التمارين الرياضية
+    path('exercises/suggest/', suggest_exercises, name='exercise-suggest'),
     
-    # 😊 تحليل المشاعر (مع دعم اللغة)
-    path('sentiment/analyze/', views.analyze_sentiment, name='sentiment-analyze'),
+    # 😊 تحليل المشاعر
+    path('sentiment/analyze/', analyze_sentiment, name='sentiment-analyze'),
     
-    # 💡 التوصيات الذكية (مع دعم اللغة)
-    path('smart-recommendations/', views.get_smart_recommendations, name='smart-recommendations'),
+    # 💡 التوصيات الذكية
+    path('smart-recommendations/', get_smart_recommendations, name='smart-recommendations'),
     
     # 📊 التقارير
     path('reports/all-data/', views.get_all_reports_data, name='reports-all-data'),
@@ -83,24 +93,24 @@ base_urls = [
     # 📷 ماسح الباركود
     path('scan-barcode/', scan_barcode, name='scan-barcode'),
     
-    # ⌚ بيانات الساعة الذكية (مع دعم اللغة)
-    path('watch/health-data/', views.watch_health_data, name='watch_health_data'),
-    path('watch/history/', views.watch_history, name='watch_history'),
-    path('watch/adb-data/', views.adb_watch_data, name='adb_watch_data'),
+    # ⌚ بيانات الساعة الذكية
+    path('watch/health-data/', watch_health_data, name='watch_health_data'),
+    path('watch/history/', watch_history, name='watch_history'),
+    path('watch/adb-data/', adb_watch_data, name='adb_watch_data'),
     
     # 🩺 الأدوية
-    path('medications/search/', views.search_medication, name='search-medication'),
-    path('medications/<int:medication_id>/', views.get_medication_details, name='medication-details'),
-    path('medications/user/', views.get_user_medications, name='user-medications'),
-    path('medications/user/add/', views.add_user_medication, name='add-user-medication'),
-    path('medications/user/<int:user_med_id>/delete/', views.delete_user_medication, name='delete-user-medication'),
+    path('medications/search/', search_medication, name='search-medication'),
+    path('medications/<int:medication_id>/', get_medication_details, name='medication-details'),
+    path('medications/user/', get_user_medications, name='user-medications'),
+    path('medications/user/add/', add_user_medication, name='add-user-medication'),
+    path('medications/user/<int:user_med_id>/delete/', delete_user_medication, name='delete-user-medication'),
     
     # 📱 Push Notifications
     path('push-subscribe/', push_subscribe, name='push-subscribe'),
     path('send-push/', send_push_notification, name='send-push'),
-    path('achievements/', views.get_user_achievements, name='achievements'),
+    path('achievements/', get_user_achievements, name='achievements'),
     
-    # 👤 إدارة الحساب (مع دعم اللغة)
+    # 👤 إدارة الحساب
     path('profile/', manage_profile, name='manage_profile'),
     path('change-password/', change_password, name='change_password'),
     path('delete-account/', delete_my_account, name='delete_account'),
@@ -113,13 +123,13 @@ base_urls = [
     # 🔔 إشعارات داخل التطبيق
     path('notifications/create/', create_notification, name='create-notification'),
     path('notifications/get/', get_notifications, name='get-notifications'),
+    path('notifications/simple/', get_notifications_simple, name='notifications-simple'),
+    path('notifications/create-test/', create_test_notifications, name='create-test-notifications'),
     path('notifications/<int:notification_id>/mark-read/', mark_notification_read, name='mark-notification-read'),
     path('notifications/mark-all-read/', mark_all_notifications_read, name='mark-all-notifications-read'),
     path('notifications/<int:notification_id>/delete/', delete_notification, name='delete-notification'),
     path('notifications/delete-all-read/', delete_all_read_notifications, name='delete-all-read-notifications'),
     path('my-notifications/', get_my_notifications, name='my-notifications'),
-    path('notifications-simple/', views.get_notifications_simple, name='notifications-simple'),
-    path('create-test-notifications/', views.create_test_notifications, name='create-test-notifications'),
     path('sw-notification/', save_notification_from_sw, name='sw-notification'),
     
     # 🤖 إشعارات ذكية
@@ -129,7 +139,7 @@ base_urls = [
     path('notify-all-users/', send_notifications_to_all_users, name='notify-all-users'),
     path('generate-notifications/', generate_notifications_now, name='generate-notifications'),
     
-    # 📅 مسارات Cron Jobs (مع دعم اللغة)
+    # 📅 مسارات Cron Jobs
     path('cron/daily-summary/', cron_daily_summary, name='cron-daily-summary'),
     path('cron/morning-tip/', cron_morning_tip, name='cron-morning-tip'),
     path('cron/smart-notifications/', cron_smart_notifications, name='cron-smart-notifications'),
@@ -137,16 +147,13 @@ base_urls = [
     path('trigger-notifications/', trigger_notifications, name='trigger-notifications'),
     
     # 🧪 اختبارات
-    path('test-simple/', lambda request: JsonResponse({
-        'status': 'ok', 
-        'message': 'Test endpoint works!'
-    }), name='test-simple'),
-    path('test-websocket/', views.test_websocket, name='test-websocket'),
+    path('test-simple/', lambda request: JsonResponse({'status': 'ok', 'message': 'Test endpoint works!'}), name='test-simple'),
+    path('test-websocket/', test_websocket, name='test-websocket'),
 ]
 
 
 # =========================================================
-# ✅ مسارات الإشعارات المخصصة (لأن الـ router لا يولدها تلقائياً)
+# ✅ مسارات الإشعارات المخصصة (إضافات NotificationViewSet)
 # =========================================================
 notification_custom_urls = [
     path('notifications/unread-count/', 
@@ -168,30 +175,6 @@ notification_custom_urls = [
     path('notifications/delete-all-read/', 
          views.NotificationViewSet.as_view({'delete': 'delete_all_read'}), 
          name='notification-delete-all-read'),
-    
-    path('notifications/archive/', 
-         views.NotificationViewSet.as_view({'get': 'archive', 'post': 'restore_from_archive'}), 
-         name='notification-archive'),
-    
-    path('notifications/generate-auto/', 
-         views.NotificationViewSet.as_view({'post': 'generate_auto'}), 
-         name='notification-generate-auto'),
-    
-    path('notifications/save-push-subscription/', 
-         views.NotificationViewSet.as_view({'post': 'save_push_subscription'}), 
-         name='save-push-subscription'),
-    
-    path('notifications/send-push/', 
-         views.NotificationViewSet.as_view({'post': 'send_push'}), 
-         name='send-push'),
-    
-    path('notifications/by_type/<str:type>/', 
-         views.NotificationViewSet.as_view({'get': 'by_type'}), 
-         name='notification-by-type'),
-    
-    path('notifications/mark-bulk-read/', 
-         views.NotificationViewSet.as_view({'post': 'mark_bulk_read'}), 
-         name='notification-mark-bulk-read'),
 ]
 
 
@@ -199,46 +182,30 @@ notification_custom_urls = [
 # ✅ دمج جميع المسارات
 # =========================================================
 urlpatterns = [
-    # ✅ مسارات الـ Router (تشمل /notifications/ العادي)
     path('', include(router.urls)),
-    
-    # ✅ مسارات الإشعارات المخصصة
     *notification_custom_urls,
-    
-    # ✅ المسارات الأساسية
     *base_urls,
 ]
 
+
 # =========================================================
-# ✅ إضافة مسار لصفحة 404 مترجمة (اختياري)
+# ✅ معالجة الأخطاء (404, 500)
 # =========================================================
 def handler404(request, exception):
-    from django.http import JsonResponse
     from main.views import get_request_language
-    
     is_arabic = get_request_language(request) == 'ar'
-    message = 'الصفحة غير موجودة' if is_arabic else 'Page not found'
-    
     return JsonResponse({
         'success': False,
-        'error': message,
+        'error': 'الصفحة غير موجودة' if is_arabic else 'Page not found',
         'language': 'ar' if is_arabic else 'en'
     }, status=404)
 
-# ✅ إضافة مسار لصفحة 500 مترجمة (اختياري)
+
 def handler500(request):
-    from django.http import JsonResponse
     from main.views import get_request_language
-    
     is_arabic = get_request_language(request) == 'ar'
-    message = 'خطأ في الخادم الداخلي' if is_arabic else 'Internal server error'
-    
     return JsonResponse({
         'success': False,
-        'error': message,
+        'error': 'خطأ في الخادم الداخلي' if is_arabic else 'Internal server error',
         'language': 'ar' if is_arabic else 'en'
     }, status=500)
-
-# يمكن إضافة هذه الأسطر في settings.py
-# handler404 = 'main.urls.handler404'
-# handler500 = 'main.urls.handler500'
