@@ -132,8 +132,7 @@ base_urls = [
     path('notifications/delete-all-read/', delete_all_read_notifications, name='delete-all-read-notifications'),
     path('my-notifications/', get_my_notifications, name='my-notifications'),
     path('sw-notification/', save_notification_from_sw, name='sw-notification'),
-     path('users/me/', views.UserProfileViewSet.as_view({'get': 'me', 'patch': 'me'}), name='user-me'),
-     path('auth/register/', RegisterUserView.as_view(), name='register'),
+    path('auth/register/', RegisterUserView.as_view(), name='register'),
     
     # 🤖 إشعارات ذكية
     path('smart-notifications/', check_and_send_smart_notifications, name='smart-notifications'),
