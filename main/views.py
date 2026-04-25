@@ -1677,3 +1677,17 @@ def get_blood_sugar(request):
         return Response({'success': True, 'blood_sugar': None})
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def fix_notifications_dates(request):
+    """إصلاح التواريخ الفارغة في الإشعارات القديمة"""
+    try:
+        from django.utils import timezone
+        updated = Notification.objects.filter(sent_at__isnull=True).update(sent_at=timezone.now())
+        return Response({
+            'success': True,
+            'updated_count': updated,
+            'message': f'✅ تم تحديث {updated} إشعار'
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
