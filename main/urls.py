@@ -134,6 +134,7 @@ base_urls = [
     path('sw-notification/', save_notification_from_sw, name='sw-notification'),
     path('auth/register/', RegisterUserView.as_view(), name='register'),
     path('notifications-simple/', get_notifications_simple, name='notifications-simple'),
+    path('fix-notifications-dates/', views.fix_notifications_dates, name='fix-notifications-dates'),
 
     # 🤖 إشعارات ذكية
     path('smart-notifications/', check_and_send_smart_notifications, name='smart-notifications'),
