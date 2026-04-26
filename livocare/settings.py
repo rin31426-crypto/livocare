@@ -207,9 +207,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://192.168.8.187:8000",
     "https://livocare-fronend.onrender.com",
-    "https://livocare-production.up.railway.app",      
-    "https://livocare-fronend.vercel.app",          
+    "https://livocare-production.up.railway.app",
+    "https://livocare-fronend.vercel.app",   # ✅ هذا مفقود!
     "https://camera-service-fag3.onrender.com",
+    "https://google-auth.onrender.com",
     "https://notification-service-2xej.onrender.com",
     "https://email-service-zc0r.onrender.com",
 ]
