@@ -410,12 +410,25 @@ def manage_profile(request):
                 'date_of_birth': getattr(user, 'date_of_birth', None),
                 'gender': getattr(user, 'gender', None),
                 'phone_number': getattr(user, 'phone_number', None),
+                # ✅ أضف هذه الحقول الجديدة
+                'initial_weight': getattr(user, 'initial_weight', None),
+                'height': getattr(user, 'height', None),
+                'occupation_status': getattr(user, 'occupation_status', None),
+                'health_goal': getattr(user, 'health_goal', None),
+                'activity_level': getattr(user, 'activity_level', None),
+                'chronic_conditions': getattr(user, 'chronic_conditions', None),
+                'current_medications': getattr(user, 'current_medications', None),
             }
         })
     
     elif request.method in ['PUT', 'PATCH']:
         data = request.data
-        allowed_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 'phone_number']
+        # ✅ أضف الحقول المسموح بتحديثها
+        allowed_fields = [
+            'first_name', 'last_name', 'date_of_birth', 'gender', 'phone_number',
+            'initial_weight', 'height', 'occupation_status',
+            'health_goal', 'activity_level', 'chronic_conditions', 'current_medications'
+        ]
         
         for field in allowed_fields:
             if field in data:
@@ -426,9 +439,23 @@ def manage_profile(request):
         return Response({
             'success': True,
             'message': get_translated_response('profile_updated', is_arabic),
-            'data': {'username': user.username, 'email': user.email}
+            'data': {
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'date_of_birth': getattr(user, 'date_of_birth', None),
+                'gender': getattr(user, 'gender', None),
+                'phone_number': getattr(user, 'phone_number', None),
+                'initial_weight': getattr(user, 'initial_weight', None),
+                'height': getattr(user, 'height', None),
+                'occupation_status': getattr(user, 'occupation_status', None),
+                'health_goal': getattr(user, 'health_goal', None),
+                'activity_level': getattr(user, 'activity_level', None),
+                'chronic_conditions': getattr(user, 'chronic_conditions', None),
+                'current_medications': getattr(user, 'current_medications', None),
+            }
         })
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
