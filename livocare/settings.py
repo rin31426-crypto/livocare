@@ -228,6 +228,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://192.168.8.187:8000",
     "https://*.onrender.com",
     "https://*.railway.app",
+    "https://livocare-fronend.vercel.app",
 ]
 
 CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
