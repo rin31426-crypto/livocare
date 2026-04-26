@@ -166,19 +166,41 @@ class MoodEntry(models.Model):
 # الملف: main/models.py (تابع)
 
 # في main/models.py - ابحث عن class HealthStatus وأضف هذا السطر
+# في main/models.py - ابحث عن class HealthStatus وأضف هذه الحقول
+
 class HealthStatus(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='health_records', verbose_name="المستخدم")
     
     recorded_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ ووقت التسجيل")
     weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="الوزن (كجم)")
     
-    # ✅ أضف هذا الحقل
+    # ✅ معدل ضربات القلب
     heart_rate = models.IntegerField(null=True, blank=True, verbose_name="معدل ضربات القلب (BPM)")
     
+    # ✅ ضغط الدم
     systolic_pressure = models.IntegerField(null=True, blank=True, verbose_name="الضغط الانقباضي")
     diastolic_pressure = models.IntegerField(null=True, blank=True, verbose_name="الضغط الانبساطي")
+    
+    # ✅ نسبة الأكسجين في الدم
     spo2 = models.IntegerField(null=True, blank=True, verbose_name="نسبة الأكسجين في الدم (SpO2%)")
-    blood_glucose = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="سكر الدم")
+    
+    # ✅ مستوى السكر في الدم
+    blood_glucose = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="سكر الدم (mg/dL)")
+    
+    # ✅ درجة حرارة الجسم (جديدة)
+    body_temperature = models.DecimalField(
+        max_digits=4, 
+        decimal_places=1, 
+        null=True, 
+        blank=True, 
+        verbose_name="درجة حرارة الجسم (C°)"
+    )
+    
+    # ✅ نبضات القلب (إضافي)
+    pulse = models.IntegerField(null=True, blank=True, verbose_name="النبض (Pulse)")
+    
+    # ✅ مستوى التنفس
+    respiration_rate = models.IntegerField(null=True, blank=True, verbose_name="معدل التنفس ( breaths/min)")
     
     class Meta:
         verbose_name = "القياسات الحيوية"
@@ -186,8 +208,7 @@ class HealthStatus(models.Model):
         ordering = ['-recorded_at']
 
     def __str__(self):
-        return f"{self.user.username} - Status at {self.recorded_at.date()}"    
-# الملف: main/models.py (تابع)
+        return f"{self.user.username} - Status at {self.recorded_at.date()}"
 
 class Meal(models.Model):
     """
@@ -549,4 +570,49 @@ class EnvironmentData(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - Env Data on {self.date}"
-
+class Achievement(models.Model):
+    """نموذج الإنجازات والميداليات"""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='achievements')
+    title = models.CharField(max_length=100, verbose_name="عنوان الإنجاز")
+    description = models.TextField(verbose_name="وصف الإنجاز")
+    icon = models.CharField(max_length=10, default='🏆', verbose_name="الأيقونة")
+    achieved_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنجاز")
+    category = models.CharField(max_length=50, choices=[
+        ('streak', 'تتابع'), ('activity', 'نشاط'), ('weight', 'وزن'), 
+        ('sleep', 'نوم'), ('habit', 'عادة'), ('special', 'خاص')
+    ], default='special')
+    
+    class Meta:
+        verbose_name = "إنجاز"
+        verbose_name_plural = "الإنجازات"
+        ordering = ['-achieved_at']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
+class Reminder(models.Model):
+    """نموذج التذكيرات"""
+    REMINDER_TYPES = [
+        ('medication', 'دواء'),
+        ('habit', 'عادة'),
+        ('water', 'ماء'),
+        ('meal', 'وجبة'),
+        ('sleep', 'نوم'),
+        ('general', 'عام'),
+    ]
+    
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reminders')
+    title = models.CharField(max_length=100, verbose_name="عنوان التذكير")
+    reminder_type = models.CharField(max_length=20, choices=REMINDER_TYPES, default='general')
+    reminder_time = models.TimeField(verbose_name="وقت التذكير")
+    reminder_days = models.JSONField(default=list, verbose_name="أيام التكرار (0=الأحد, 6=السبت)")
+    is_active = models.BooleanField(default=True, verbose_name="نشط")
+    related_id = models.IntegerField(null=True, blank=True, verbose_name="معرف العنصر المرتبط")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "تذكير"
+        verbose_name_plural = "التذكيرات"
+        ordering = ['reminder_time']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.title} at {self.reminder_time}"
