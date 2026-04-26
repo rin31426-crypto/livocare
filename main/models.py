@@ -10,45 +10,68 @@ from django.contrib.auth.models import User
 # ==============================================================================
 # 1. نموذج: المستخدم (CustomUser) - أساس كل شيء
 # ==============================================================================
+# backend/users/models.py
+
+# users/models.py أو main/models.py
+
 class CustomUser(AbstractUser):
     """
     نموذج المستخدم المخصص (يمثل كيان المستخدم)
     """
     # 1. الخصائص الأساسية
     date_of_birth = models.DateField(null=True, blank=True, verbose_name="تاريخ الميلاد")
-    gender = models.CharField(max_length=10, choices=[('M', 'ذكر'), ('F', 'أنثى')], verbose_name="النوع")
+    gender = models.CharField(max_length=10, choices=[('M', 'ذكر'), ('F', 'أنثى')], null=True, blank=True, verbose_name="النوع")
     phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True, verbose_name="رقم الهاتف")
     
     # 2. بيانات التقييم الأولي
     initial_weight = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="الوزن الأولي (كجم)")
     height = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="الطول (سم)")
     
-    # 3. الوضع الوظيفي/الأكاديمي (لتحليل الإجهاد)
+    # 3. الوضع الوظيفي/الأكاديمي
     occupation_status = models.CharField(
         max_length=50,
         choices=[('Student', 'طالب'), ('Full-Time', 'موظف بدوام كامل'), ('Freelancer', 'عمل حر'), ('Other', 'أخرى')],
         default='Other',
         verbose_name="الوضع الوظيفي/الأكاديمي"
     )
-    # التعديلات المطلوبة لحل خطأ الترحيل (SystemCheckError)
-    # -----------------------------------------------------
+    
+    # ✅ أهداف الصحة
+    health_goal = models.CharField(
+        max_length=20,
+        choices=[('loss', 'خسارة وزن'), ('gain', 'زيادة وزن'), ('maintain', 'تثبيت الوزن')],
+        null=True,
+        blank=True,
+        verbose_name="الهدف الصحي"
+    )
+    
+    # ✅ مستوى النشاط
+    activity_level = models.CharField(
+        max_length=20,
+        choices=[('low', 'منخفض'), ('medium', 'متوسط'), ('high', 'عالي')],
+        null=True,
+        blank=True,
+        verbose_name="مستوى النشاط"
+    )
+    
+    # ✅ قم بإزالة هذين الحقلين من CustomUser لأن لديهما نموذجين منفصلين
+    # chronic_conditions = models.TextField(...)  # ❌ أزل هذا السطر
+    # current_medications = models.TextField(...) # ❌ أزل هذا السطر
+    
+    # العلاقات (لتجنب التضارب مع auth)
     groups = models.ManyToManyField(
         'auth.Group',
         verbose_name=('groups'),
         blank=True,
-        help_text=('The groups this user belongs to.'),
-        related_name="custom_user_groups",  # <--- اسم فريد يحل مشكلة الـ CLASH
+        related_name="custom_user_groups",
         related_query_name="user",
     )
     user_permissions = models.ManyToManyField(
         'auth.Permission',
         verbose_name=('user permissions'),
         blank=True,
-        help_text=('Specific permissions for this user.'),
-        related_name="custom_user_permissions", # <--- اسم فريد يحل مشكلة الـ CLASH
+        related_name="custom_user_permissions",
         related_query_name="user",
     )
-    # -----------------------------------------------------
 
     class Meta:
         verbose_name = "المستخدم"
