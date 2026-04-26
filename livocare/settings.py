@@ -301,24 +301,16 @@ NOTIFICATION_TIMING = {
 # 🔒 إعدادات الأمان للإنتاج
 # ==============================================================================
 
-if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-
-# ==============================================================================
-# ⚡ تحسينات الأداء
-# ==============================================================================
-
-if not DEBUG:
-    WEB_CONCURRENCY = 1
-    GUNICORN_TIMEOUT = 120
-    CONN_MAX_AGE = 0
+# تم تعطيل إعدادات SSL مؤقتاً لتجنب مشكلة إعادة التوجيه
+# if not DEBUG:
+#     SECURE_SSL_REDIRECT = True
+#     SESSION_COOKIE_SECURE = True
+#     CSRF_COOKIE_SECURE = True
+#     SECURE_BROWSER_XSS_FILTER = True
+#     SECURE_CONTENT_TYPE_NOSNIFF = True
+#     SECURE_HSTS_SECONDS = 31536000
+#     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+#     SECURE_HSTS_PRELOAD = True
 # ==============================================================================
 # ⏰ Cron Jobs (المهام المجدولة)
 # ==============================================================================
