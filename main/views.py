@@ -388,10 +388,6 @@ class NotificationViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-# ==============================================================================
-# 👤 5. إدارة الحساب API endpoints
-# ==============================================================================
-
 @api_view(['GET', 'PUT', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def manage_profile(request):
@@ -410,29 +406,34 @@ def manage_profile(request):
                 'date_of_birth': getattr(user, 'date_of_birth', None),
                 'gender': getattr(user, 'gender', None),
                 'phone_number': getattr(user, 'phone_number', None),
-                # ✅ أضف هذه الحقول الجديدة
-                'initial_weight': getattr(user, 'initial_weight', None),
-                'height': getattr(user, 'height', None),
+                'initial_weight': float(user.initial_weight) if user.initial_weight else None,
+                'height': float(user.height) if user.height else None,
                 'occupation_status': getattr(user, 'occupation_status', None),
                 'health_goal': getattr(user, 'health_goal', None),
                 'activity_level': getattr(user, 'activity_level', None),
-                'chronic_conditions': getattr(user, 'chronic_conditions', None),
-                'current_medications': getattr(user, 'current_medications', None),
+                # ❌ أزل هذه السطور - تسبب خطأ RelatedManager
+                # 'chronic_conditions': getattr(user, 'chronic_conditions', None),
+                # 'current_medications': getattr(user, 'current_medications', None),
             }
         })
     
     elif request.method in ['PUT', 'PATCH']:
         data = request.data
-        # ✅ أضف الحقول المسموح بتحديثها
         allowed_fields = [
             'first_name', 'last_name', 'date_of_birth', 'gender', 'phone_number',
             'initial_weight', 'height', 'occupation_status',
-            'health_goal', 'activity_level', 'chronic_conditions', 'current_medications'
+            'health_goal', 'activity_level'
         ]
         
         for field in allowed_fields:
             if field in data:
-                setattr(user, field, data[field])
+                value = data[field]
+                if field in ['initial_weight', 'height']:
+                    try:
+                        value = float(value) if value else None
+                    except (ValueError, TypeError):
+                        value = None
+                setattr(user, field, value)
         
         user.save()
         
@@ -447,164 +448,13 @@ def manage_profile(request):
                 'date_of_birth': getattr(user, 'date_of_birth', None),
                 'gender': getattr(user, 'gender', None),
                 'phone_number': getattr(user, 'phone_number', None),
-                'initial_weight': getattr(user, 'initial_weight', None),
-                'height': getattr(user, 'height', None),
+                'initial_weight': float(user.initial_weight) if user.initial_weight else None,
+                'height': float(user.height) if user.height else None,
                 'occupation_status': getattr(user, 'occupation_status', None),
                 'health_goal': getattr(user, 'health_goal', None),
                 'activity_level': getattr(user, 'activity_level', None),
-                'chronic_conditions': getattr(user, 'chronic_conditions', None),
-                'current_medications': getattr(user, 'current_medications', None),
             }
         })
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def change_password(request):
-    """تغيير كلمة المرور"""
-    user = request.user
-    is_arabic = get_request_language(request) == 'ar'
-    
-    current_password = request.data.get('current_password')
-    new_password = request.data.get('new_password')
-    
-    if not current_password or not new_password:
-        return Response({'success': False, 'error': get_translated_response('invalid_data', is_arabic)}, status=400)
-    
-    if len(new_password) < 8:
-        return Response({'success': False, 'error': get_translated_response('password_too_short', is_arabic)}, status=400)
-    
-    if not user.check_password(current_password):
-        return Response({'success': False, 'error': get_translated_response('invalid_password', is_arabic)}, status=400)
-    
-    user.set_password(new_password)
-    user.save()
-    
-    return Response({'success': True, 'message': get_translated_response('password_changed', is_arabic)})
-
-
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_my_account(request):
-    """حذف حساب المستخدم بالكامل"""
-    user = request.user
-    username = user.username
-    user.delete()
-    
-    return Response({'success': True, 'message': f'تم حذف حساب المستخدم {username} بنجاح'})
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def export_all_data(request):
-    """تصدير جميع بيانات المستخدم"""
-    user = request.user
-    
-    data = {
-        'profile': {'username': user.username, 'email': user.email},
-        'health_status': list(HealthStatus.objects.filter(user=user).values()),
-        'activities': list(PhysicalActivity.objects.filter(user=user).values()),
-        'sleep': list(Sleep.objects.filter(user=user).values()),
-        'mood_entries': list(MoodEntry.objects.filter(user=user).values()),
-        'meals': list(Meal.objects.filter(user=user).values()),
-        'habits': list(HabitDefinition.objects.filter(user=user).values()),
-        'habit_logs': list(HabitLog.objects.filter(habit__user=user).values()),
-        'goals': list(HealthGoal.objects.filter(user=user).values()),
-    }
-    
-    return Response({'success': True, 'data': data, 'export_date': timezone.now().isoformat()})
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def backup_data(request):
-    """إنشاء نسخة احتياطية من البيانات"""
-    user = request.user
-    
-    backup = {
-        'user_id': user.id,
-        'username': user.username,
-        'export_date': timezone.now().isoformat(),
-        'data': export_all_data(request).data.get('data', {})
-    }
-    
-    return Response({'success': True, 'backup': backup, 'message': 'تم إنشاء النسخة الاحتياطية بنجاح'})
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def restore_backup(request):
-    """استعادة البيانات من نسخة احتياطية"""
-    backup_data = request.data.get('backup')
-    
-    if not backup_data:
-        return Response({'success': False, 'error': 'لا توجد بيانات للاستعادة'}, status=400)
-    
-    return Response({'success': True, 'message': 'تم استعادة البيانات بنجاح'})
-
-
-@api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
-def user_settings(request):
-    """إعدادات المستخدم"""
-    if request.method == 'GET':
-        return Response({
-            'success': True,
-            'data': {
-                'dark_mode': getattr(request.user, 'dark_mode', False),
-                'notifications_enabled': getattr(request.user, 'notifications_enabled', True),
-                'language': getattr(request.user, 'language', 'ar'),
-            }
-        })
-    
-    elif request.method == 'POST':
-        data = request.data
-        if 'dark_mode' in data:
-            request.user.dark_mode = data['dark_mode']
-        if 'notifications_enabled' in data:
-            request.user.notifications_enabled = data['notifications_enabled']
-        if 'language' in data:
-            request.user.language = data['language']
-        request.user.save()
-        
-        return Response({'success': True, 'message': 'تم حفظ الإعدادات بنجاح'})
-
-
-@api_view(['GET', 'POST', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def manage_goals(request):
-    """إدارة الأهداف الصحية"""
-    if request.method == 'GET':
-        goals = HealthGoal.objects.filter(user=request.user)
-        return Response({'success': True, 'data': list(goals.values())})
-    
-    elif request.method == 'POST':
-        serializer = HealthGoalSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response({'success': True, 'data': serializer.data, 'message': 'تم إضافة الهدف بنجاح'})
-        return Response({'success': False, 'errors': serializer.errors}, status=400)
-    
-    elif request.method == 'PUT':
-        goal_id = request.data.get('id')
-        try:
-            goal = HealthGoal.objects.get(id=goal_id, user=request.user)
-            serializer = HealthGoalSerializer(goal, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({'success': True, 'data': serializer.data, 'message': 'تم تحديث الهدف بنجاح'})
-            return Response({'success': False, 'errors': serializer.errors}, status=400)
-        except HealthGoal.DoesNotExist:
-            return Response({'success': False, 'error': 'الهدف غير موجود'}, status=404)
-    
-    elif request.method == 'DELETE':
-        goal_id = request.data.get('id')
-        try:
-            goal = HealthGoal.objects.get(id=goal_id, user=request.user)
-            goal.delete()
-            return Response({'success': True, 'message': 'تم حذف الهدف بنجاح'})
-        except HealthGoal.DoesNotExist:
-            return Response({'success': False, 'error': 'الهدف غير موجود'}, status=404)
-
 
 # ==============================================================================
 # 🌤️ 6. APIs الخارجية
