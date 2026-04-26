@@ -188,6 +188,20 @@ SIMPLE_JWT = {
 # 🔗 CORS
 # ==============================================================================
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://livocare-fronend.onrender.com",
+    "https://camera-service-fag3.onrender.com",
+    "https://google-auth.onrender.com",
+    "https://notification-service-2xej.onrender.com",
+    "https://email-service-zc0r.onrender.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.8.187:8000",
+    "https://*.onrender.com",
+    "https://*.railway.app",
+    "https://livocare-production.up.railway.app",  # ✅ أضف هذا السطر
+]
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -197,11 +211,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://google-auth.onrender.com",
     "https://notification-service-2xej.onrender.com",
     "https://email-service-zc0r.onrender.com",
-]
-
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.onrender\.com$",
-    r"^https://.*\.railway\.app$",
+    "https://livocare-production.up.railway.app",  # ✅ أضف هذا السطر
 ]
 
 CORS_ALLOW_CREDENTIALS = True
