@@ -17,6 +17,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'date_of_birth', 'gender', 'phone_number', 
             'initial_weight', 'height', 'occupation_status',
+            'health_goal', 'activity_level',           # ✅ أضف هذه
+            'chronic_conditions', 'current_medications', # ✅ أضف هذه
             'is_active', 'date_joined'
         ]
         read_only_fields = ['id', 'username', 'date_joined', 'is_active']
@@ -24,7 +26,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'password': {'write_only': True, 'required': False},
             'email': {'required': True}
         }
-
 # 2. Serializer للنشاط البدني
 class PhysicalActivitySerializer(serializers.ModelSerializer):
     class Meta:
