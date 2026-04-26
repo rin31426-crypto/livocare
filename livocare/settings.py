@@ -27,6 +27,7 @@ ALLOWED_HOSTS = [
     '.railway.app',
     'livocare.onrender.com',
     'livocare-fronend.onrender.com',
+    'livocare-production.up.railway.app',  # ✅ أضف هذا السطر
 ]
 
 # ==============================================================================
